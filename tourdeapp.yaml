@@ -17,7 +17,7 @@ containers:
       MYSQL_ROOT_PASSWORD: password
     port: 3306
   - name: caddy
-    image: registry.tourde.cloud/<slug>/caddy
+    image: registry.tourde.cloud/k-mo-nwm/caddy
     port: 80
 build:
   - name: web
