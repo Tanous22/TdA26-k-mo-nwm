@@ -1,6 +1,7 @@
 :80 {
     encode gzip
 
+    # /api a vše pod /api -> backend
     handle_path /api/* {
         reverse_proxy server:3000
     }
@@ -9,6 +10,7 @@
         reverse_proxy server:3000
     }
 
+    # všechno ostatní -> frontend
     handle {
         reverse_proxy web:4173
     }
