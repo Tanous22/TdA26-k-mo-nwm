@@ -6,7 +6,7 @@ containers:
     port: 3001
   - name: server
     image: registry.tourde.cloud/k-mo-nwm/server
-    port: 3001
+    port: 3000
     env:
       DATABASE_URL: mysql://root:password@localhost:3306/tda_app
   - name: mysql
