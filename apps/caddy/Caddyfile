@@ -9,8 +9,7 @@
         reverse_proxy server:3000
     }
 
-    # Pokud web ještě není nahozený, vracej 502 – to je OK a TdA počká
     handle {
-        reverse_proxy web:4173
+        reverse_proxy web:3001
     }
 }
