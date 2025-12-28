@@ -12,116 +12,95 @@ interface Course {
     feed: string[];
 }
 
-// 1. DATA (musí být vně funkcí)
+// Tady se data ukládají.
+// Test si sem uloží "Course for Detail Page Test".
 const courses: Course[] = [];
 
 const generateId = () => {
     return crypto.randomBytes(16).toString("hex");
 };
 
-// --- GET /courses (Seznam) ---
+// GET /courses (Seznam)
 coursesRouter.get("/", (req, res) => {
     const accept = req.headers.accept || "";
-
-    // Pokud chce test HTML (render test), vrátíme HTML
     if (accept.includes("html")) {
-        const html = `
+        return res.send(`
             <!DOCTYPE html>
             <html>
             <body>
                 <h1>Courses</h1>
-                <ul>
-                    ${courses.map(c => `<li><a href="/courses/${c.uuid}">${c.name}</a></li>`).join('')}
-                </ul>
+                <ul>${courses.map(c => `<li><a href="/courses/${c.uuid}">${c.name}</a></li>`).join('')}</ul>
             </body>
             </html>
-        `;
-        return res.send(html);
+        `);
     }
-
-    // Jinak vracíme JSON (API test)
     res.status(200).json(courses);
 });
 
-// --- POST /courses (Vytvoření) ---
+// POST /courses
 coursesRouter.post("/", (req, res) => {
-    // Validace
-    if (!req.body || !req.body.name) {
-        return res.status(400).json({ error: "Missing name" });
-    }
+    if (!req.body || !req.body.name) return res.status(400).json({ error: "Missing data" });
 
     const newCourse: Course = {
         uuid: generateId(),
         name: req.body.name,
         description: req.body.description || "",
-        materials: [], // Test varuje, pokud chybí
+        materials: [],
         quizzes: [],
         feed: []
     };
-
     courses.push(newCourse);
-    // Musí vrátit 201 Created a vytvořený objekt
+    
+    // DEBUG: Vypíše do konzole, že jsme kurz uložili
+    console.log(`[POST] Uložen kurz: ${newCourse.name} (${newCourse.uuid})`);
+    
     res.status(201).json(newCourse);
 });
 
-// --- GET /courses/:courseId (Detail) ---
+// GET /courses/:courseId (Detail - TADY SE LÁME CHLEBA)
 coursesRouter.get("/:courseId", (req, res) => {
     const { courseId } = req.params;
     const course = courses.find(c => c.uuid === courseId);
     const accept = req.headers.accept || "";
 
-    // Pokud chce HTML (prohlížeč/test stránky)
+    // DEBUG: Vypíše, jestli jsme kurz našli
+    console.log(`[GET] Hledám ID: ${courseId}. Našel jsem? ${!!course}. Chce HTML? ${accept.includes("html")}`);
+
     if (accept.includes("html")) {
-        // KRITICKÉ: Pokud kurz neexistuje, musíme vrátit HTML chybu.
-        // Jinak Express propadne dál a zobrazí "Hello TdA", což shodí test.
+        // Pokud kurz v paměti není, vrátíme HTML chybu (ne "Hello TdA")
         if (!course) {
             return res.status(404).send("<html><body><h1>Course not found</h1></body></html>");
         }
 
-        // Pokud existuje, vrátíme HTML obsahující jméno kurzu (test hledá content.toContain(name))
+        // TOTO JE TO ŘEŠENÍ:
+        // Vezmeme course.name (což je "Course for Detail Page Test") a vložíme ho do HTML.
         const html = `
             <!DOCTYPE html>
             <html>
+            <head><title>${course.name}</title></head>
             <body>
-                <h1>${course.name}</h1>
-                <p>${course.description}</p>
+                <h1>${course.name}</h1> <p>${course.description}</p>
             </body>
             </html>
         `;
         return res.send(html);
     }
 
-    // Pokud chce JSON (API)
-    if (!course) {
-        return res.status(404).json({ error: "Not found" });
-    }
-    
+    if (!course) return res.status(404).json({ error: "Not found" });
     res.status(200).json(course);
 });
 
-// --- PUT /courses/:courseId (Update) ---
+// PUT a DELETE (aby testy neřvaly)
 coursesRouter.put("/:courseId", (req, res) => {
-    const index = courses.findIndex(c => c.uuid === req.params.courseId);
-    if (index === -1) return res.status(404).json({ error: "Not found" });
-
-    // Aktualizujeme data, ale zachováme ID
-    courses[index] = { 
-        ...courses[index], 
-        ...req.body, 
-        uuid: courses[index].uuid 
-    };
-    res.status(200).json(courses[index]);
+    const idx = courses.findIndex(c => c.uuid === req.params.courseId);
+    if (idx === -1) return res.status(404).json({ error: "Not found" });
+    courses[idx] = { ...courses[idx], ...req.body, uuid: courses[idx].uuid };
+    res.status(200).json(courses[idx]);
 });
 
-// --- DELETE /courses/:courseId (Smazání) ---
 coursesRouter.delete("/:courseId", (req, res) => {
-    const index = courses.findIndex(c => c.uuid === req.params.courseId);
-    if (index === -1) {
-        // Test sice nečeká 404 u delete explicitně, ale je to jistota
-        return res.status(404).json({ error: "Not found" });
-    }
-
-    courses.splice(index, 1);
-    // Musí vrátit 204 No Content
+    const idx = courses.findIndex(c => c.uuid === req.params.courseId);
+    if (idx === -1) return res.status(404).json({ error: "Not found" });
+    courses.splice(idx, 1);
     res.status(204).send();
 });
