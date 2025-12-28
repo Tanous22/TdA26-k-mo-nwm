@@ -12,9 +12,10 @@ interface Course {
     feed: string[];
 }
 
-// Data musí být mimo funkce, aby přežila mezi requesty
+// Data držíme v paměti
 const courses: Course[] = [];
 
+// Bezpečné generování ID
 const generateId = () => {
     return crypto.randomBytes(16).toString("hex");
 };
@@ -23,9 +24,9 @@ const generateId = () => {
 coursesRouter.get("/", (req, res) => {
     const accept = req.headers.accept || "";
     
-    // Pokud je to HTML request (prohlížeč)
-    if (accept.includes("html")) {
-        return res.send(`
+    // Pokud klient chce HTML, vrátíme seznam jako stránku
+    if (accept.includes("text/html")) {
+        const html = `
             <!DOCTYPE html>
             <html>
             <head><title>Courses</title></head>
@@ -34,16 +35,19 @@ coursesRouter.get("/", (req, res) => {
                 <ul>${courses.map(c => `<li><a href="/courses/${c.uuid}">${c.name}</a></li>`).join('')}</ul>
             </body>
             </html>
-        `);
+        `;
+        return res.send(html);
     }
     
-    // JSON
+    // Jinak JSON
     res.status(200).json(courses);
 });
 
 // POST /courses
 coursesRouter.post("/", (req, res) => {
-    if (!req.body.name) return res.status(400).json({ error: "Missing name" });
+    if (!req.body || !req.body.name) {
+        return res.status(400).json({ error: "Missing data" });
+    }
 
     const newCourse: Course = {
         uuid: generateId(),
@@ -54,8 +58,6 @@ coursesRouter.post("/", (req, res) => {
         feed: []
     };
     courses.push(newCourse);
-    
-    console.log("Created course:", newCourse.uuid); // Debug log
     res.status(201).json(newCourse);
 });
 
@@ -65,19 +67,17 @@ coursesRouter.get("/:courseId", (req, res) => {
     const course = courses.find(c => c.uuid === courseId);
     
     const accept = req.headers.accept || "";
-    const isHtml = accept.includes("html");
 
-    console.log(`GET request for ${courseId}, Found: ${!!course}, HTML: ${isHtml}`);
-
-    if (isHtml) {
-        // ZÁSADNÍ OPRAVA: Pokud kurz neexistuje, musíme vrátit HTML chybu.
-        // Kdybychom vrátili nic nebo nechali Express dělat svoji práci, 
-        // skočí tam ta "Hello TdA" stránka.
+    // 1. ZJISTÍME, JESTLI CHCE HTML
+    if (accept.includes("text/html")) {
+        // Pokud kurz neexistuje, vrátíme vlastní HTML 404.
+        // Kdybychom tady nevrátili nic, Express by zobrazil tu "Hello TdA" stránku.
         if (!course) {
             return res.status(404).send("<html><body><h1>Course not found</h1></body></html>");
         }
 
-        return res.send(`
+        // Pokud existuje, vrátíme detail
+        const html = `
             <!DOCTYPE html>
             <html>
             <head><title>${course.name}</title></head>
@@ -86,27 +86,35 @@ coursesRouter.get("/:courseId", (req, res) => {
                 <p>${course.description}</p>
             </body>
             </html>
-        `);
+        `;
+        return res.send(html);
     }
 
-    // API JSON odpověď
+    // 2. JINAK JSON API
     if (!course) {
         return res.status(404).json({ error: "Not found" });
     }
     res.status(200).json(course);
 });
 
-// PUT & DELETE (zkráceno, protože fungují)
+// PUT /courses/:courseId
 coursesRouter.put("/:courseId", (req, res) => {
-    const idx = courses.findIndex(c => c.uuid === req.params.courseId);
-    if (idx === -1) return res.status(404).json({ error: "Not found" });
-    courses[idx] = { ...courses[idx], ...req.body, uuid: courses[idx].uuid };
-    res.status(200).json(courses[idx]);
+    const index = courses.findIndex(c => c.uuid === req.params.courseId);
+    if (index === -1) return res.status(404).json({ error: "Not found" });
+
+    courses[index] = { 
+        ...courses[index], 
+        ...req.body, 
+        uuid: courses[index].uuid 
+    };
+    res.status(200).json(courses[index]);
 });
 
+// DELETE /courses/:courseId
 coursesRouter.delete("/:courseId", (req, res) => {
-    const idx = courses.findIndex(c => c.uuid === req.params.courseId);
-    if (idx === -1) return res.status(404).json({ error: "Not found" });
-    courses.splice(idx, 1);
+    const index = courses.findIndex(c => c.uuid === req.params.courseId);
+    if (index === -1) return res.status(404).json({ error: "Not found" });
+
+    courses.splice(index, 1);
     res.status(204).send();
 });
