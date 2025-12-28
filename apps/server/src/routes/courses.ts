@@ -14,18 +14,16 @@ interface Course {
 
 const courses: Course[] = [];
 
-// Bezpečné generování ID
 const generateId = () => {
     return crypto.randomBytes(16).toString("hex");
 };
 
 // GET /courses (Seznam)
 coursesRouter.get("/", (req, res) => {
-    // Ruční kontrola hlavičky - spolehlivější pro testy než req.accepts()
+    // Agresivní detekce HTML - pokud hlavička obsahuje "html", vrátíme stránku
     const accept = req.headers.accept || "";
-    const isHtml = accept.includes("text/html");
-
-    if (isHtml) {
+    
+    if (accept.includes("html")) {
         const html = `
             <!DOCTYPE html>
             <html>
@@ -39,7 +37,6 @@ coursesRouter.get("/", (req, res) => {
         return res.send(html);
     }
     
-    // JSON pro API
     res.status(200).json(courses);
 });
 
@@ -65,17 +62,18 @@ coursesRouter.post("/", (req, res) => {
 coursesRouter.get("/:courseId", (req, res) => {
     const { courseId } = req.params;
     const course = courses.find(c => c.uuid === courseId);
-    
-    // Ruční kontrola hlavičky
-    const accept = req.headers.accept || "";
-    const isHtml = accept.includes("text/html");
 
-    // Pokud chce HTML (prohlížeč)
+    // Agresivní detekce HTML
+    const accept = req.headers.accept || "";
+    const isHtml = accept.includes("html");
+
     if (isHtml) {
+        // Pokud kurz neexistuje, musíme vrátit HTML chybu, jinak tam skočí "Hello TdA"
         if (!course) {
-            // DŮLEŽITÉ: Vrátit HTML 404, aby se neaktivoval fallback "Hello TdA"
             return res.status(404).send("<html><body><h1>Course not found</h1></body></html>");
         }
+        
+        // Tady generujeme to dynamické HTML, které test hledá
         const html = `
             <!DOCTYPE html>
             <html>
@@ -89,7 +87,7 @@ coursesRouter.get("/:courseId", (req, res) => {
         return res.send(html);
     }
 
-    // Pokud chce JSON (API)
+    // JSON API logika
     if (!course) {
         return res.status(404).json({ error: "Not found" });
     }
