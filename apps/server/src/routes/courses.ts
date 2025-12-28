@@ -1,7 +1,9 @@
-import { Router, Request, Response } from 'express';
-import { randomUUID } from 'crypto'; // Vestavěná knihovna v Node.js
+import { Router } from "express";
+import crypto from "crypto";
 
-// 1. Definice tvaru dat (Interface)
+export const coursesRouter = Router();
+
+// Definice typu pro TypeScript
 interface Course {
     uuid: string;
     name: string;
@@ -11,93 +13,145 @@ interface Course {
     feed: string[];
 }
 
-const router = Router();
-
-// 2. In-memory databáze (pole)
-// POZOR: Po restartu serveru se data smažou
+// In-memory databáze
 const courses: Course[] = [];
 
-// GET /courses (Hybrid: HTML i JSON)
-router.get('/', (req: Request, res: Response) => {
-    // Pokud chce prohlížeč HTML
-    if (req.accepts('html')) {
-        const html = `
-            <html><body>
-                <h1>Courses</h1>
-                <ul>${courses.map(c => `<li><a href="/courses/${c.uuid}">${c.name}</a></li>`).join('')}</ul>
-            </body></html>
-        `;
-        return res.send(html);
+// Pomocná funkce pro bezpečné generování ID
+const generateId = () => {
+    // Pokud je dostupné randomUUID (Node 14.17+), použijeme ho
+    if (typeof crypto.randomUUID === 'function') {
+        return crypto.randomUUID();
     }
-    // Jinak vracíme data pro testy
-    res.json(courses);
+    // Fallback pro starší Node
+    return crypto.randomBytes(16).toString("hex");
+};
+
+// GET /courses
+coursesRouter.get("/", (req, res) => {
+    try {
+        // Bezpečné zjištění hlavičky (pokud chybí, použijeme prázdný string)
+        const acceptHeader = req.headers.accept || "";
+
+        // Pokud chce prohlížeč HTML
+        if (acceptHeader.includes("text/html")) {
+            const html = `
+                <html><body>
+                    <h1>Courses</h1>
+                    <ul>${courses.map(c => `<li><a href="/courses/${c.uuid}">${c.name}</a></li>`).join('')}</ul>
+                </body></html>
+            `;
+            return res.send(html);
+        }
+
+        // Jinak vracíme JSON
+        res.status(200).json(courses);
+    } catch (error) {
+        console.error("GET / error:", error);
+        res.status(500).json({ error: "Internal Server Error" });
+    }
 });
 
-// POST /courses (Vytvoření)
-router.post('/', (req: Request, res: Response) => {
-    const newCourse: Course = {
-        uuid: randomUUID(),
-        name: req.body.name,
-        description: req.body.description,
-        materials: [],
-        quizzes: [],
-        feed: []
-    };
-    courses.push(newCourse);
-    res.status(201).json(newCourse);
+// POST /courses
+coursesRouter.post("/", (req, res) => {
+    try {
+        console.log("POST body:", req.body); // Debug pro kontrolu
+
+        // Ochrana proti undefined body (pokud chybí express.json middleware)
+        if (!req.body) {
+            console.error("req.body is undefined! Check app.use(express.json())");
+            return res.status(500).json({ error: "Server misconfiguration: missing body parser" });
+        }
+
+        const { name, description } = req.body;
+
+        if (!name || !description) {
+            return res.status(400).json({ error: "Missing name or description" });
+        }
+
+        const newCourse: Course = {
+            uuid: generateId(),
+            name: name,
+            description: description,
+            materials: [],
+            quizzes: [],
+            feed: []
+        };
+
+        courses.push(newCourse);
+        res.status(201).json(newCourse);
+    } catch (error) {
+        console.error("POST / error:", error);
+        res.status(500).json({ error: "Internal Server Error" });
+    }
 });
 
-// GET /courses/:courseId (Detail + 404 + HTML)
-router.get('/:courseId', (req: Request, res: Response) => {
-    const { courseId } = req.params;
-    const course = courses.find(c => c.uuid === courseId);
+// GET /courses/:courseId
+coursesRouter.get("/:courseId", (req, res) => {
+    try {
+        const { courseId } = req.params;
+        const course = courses.find(c => c.uuid === courseId);
 
-    if (!course) {
-        return res.status(404).json({ error: "Course not found" });
+        if (!course) {
+            return res.status(404).json({ error: "Course not found" });
+        }
+
+        const acceptHeader = req.headers.accept || "";
+        if (acceptHeader.includes("text/html")) {
+            return res.send(`
+                <html><body>
+                    <h1>${course.name}</h1>
+                    <p>${course.description}</p>
+                </body></html>
+            `);
+        }
+
+        res.status(200).json(course);
+    } catch (error) {
+        console.error("GET /:id error:", error);
+        res.status(500).json({ error: "Internal Server Error" });
     }
-
-    if (req.accepts('html')) {
-        return res.send(`
-            <html><body>
-                <h1>${course.name}</h1>
-                <p>${course.description}</p>
-            </body></html>
-        `);
-    }
-
-    res.json(course);
 });
 
-// PUT /courses/:courseId (Update)
-router.put('/:courseId', (req: Request, res: Response) => {
-    const { courseId } = req.params;
-    const index = courses.findIndex(c => c.uuid === courseId);
+// PUT /courses/:courseId
+coursesRouter.put("/:courseId", (req, res) => {
+    try {
+        const { courseId } = req.params;
+        const index = courses.findIndex(c => c.uuid === courseId);
 
-    if (index === -1) {
-        return res.status(404).json({ error: "Course not found" });
+        if (index === -1) {
+            return res.status(404).json({ error: "Course not found" });
+        }
+
+        // Ochrana proti undefined body
+        const updates = req.body || {};
+
+        courses[index] = {
+            ...courses[index],
+            name: updates.name || courses[index].name,
+            description: updates.description || courses[index].description
+        };
+
+        res.status(200).json(courses[index]);
+    } catch (error) {
+        console.error("PUT /:id error:", error);
+        res.status(500).json({ error: "Internal Server Error" });
     }
-
-    // Aktualizace dat (zachováme ID a prázdná pole, pokud nejsou v body)
-    courses[index] = {
-        ...courses[index],
-        name: req.body.name || courses[index].name,
-        description: req.body.description || courses[index].description
-    };
-
-    res.json(courses[index]);
 });
 
 // DELETE /courses/:courseId
-router.delete('/:courseId', (req: Request, res: Response) => {
-    const { courseId } = req.params;
-    const index = courses.findIndex(c => c.uuid === courseId);
+coursesRouter.delete("/:courseId", (req, res) => {
+    try {
+        const { courseId } = req.params;
+        const index = courses.findIndex(c => c.uuid === courseId);
 
-    if (index === -1) {
-        return res.status(404).json({ error: "Not found" });
+        if (index === -1) {
+            return res.status(404).json({ error: "Course not found" });
+        }
+
+        courses.splice(index, 1);
+        res.status(204).send();
+    } catch (error) {
+        console.error("DELETE /:id error:", error);
+        res.status(500).json({ error: "Internal Server Error" });
     }
-
-    courses.splice(index, 1);
-    res.status(204).send();
 });
-
-export default router;
