@@ -3,6 +3,7 @@ import cors from "cors";
 import express from "express";
 import { initDatabase } from "./db/init.js";
 import { userRoutes } from "./routes/users.js";
+import { coursesRouter } from "./routes/courses.js"; // <--- PŘIDAT IMPORT
 
 const app = express();
 
@@ -18,6 +19,9 @@ apiRoutes.get("/", (_req, res) => {
 
 // /users → vrací uživatele
 apiRoutes.use("/users", userRoutes);
+
+// /courses -> vrací kurzy (pro testy)
+apiRoutes.use("/courses", coursesRouter); // <--- PŘIDAT ROUTU
 
 // DŮLEŽITÉ: připojit router na root, ne na /api
 app.use("/", apiRoutes);
