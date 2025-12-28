@@ -12,21 +12,22 @@ interface Course {
     feed: string[];
 }
 
-// Data držíme v paměti
 const courses: Course[] = [];
 
-// Bezpečné generování ID
 const generateId = () => {
     return crypto.randomBytes(16).toString("hex");
 };
 
-// GET /courses (Seznam)
+// --- GET SEZNAM ---
 coursesRouter.get("/", (req, res) => {
     const accept = req.headers.accept || "";
     
-    // Pokud klient chce HTML, vrátíme seznam jako stránku
-    if (accept.includes("text/html")) {
-        const html = `
+    // DEBUG: Ať vidíme, kdo volá
+    console.log(`[GET /courses] Accept: ${accept}, Items: ${courses.length}`);
+
+    // POKUD TO NENÍ JSON REQUEST, VRÁTÍME HTML (Vynucený default)
+    if (!accept.includes("json")) {
+        return res.send(`
             <!DOCTYPE html>
             <html>
             <head><title>Courses</title></head>
@@ -35,16 +36,15 @@ coursesRouter.get("/", (req, res) => {
                 <ul>${courses.map(c => `<li><a href="/courses/${c.uuid}">${c.name}</a></li>`).join('')}</ul>
             </body>
             </html>
-        `;
-        return res.send(html);
+        `);
     }
     
-    // Jinak JSON
     res.status(200).json(courses);
 });
 
-// POST /courses
+// --- POST ---
 coursesRouter.post("/", (req, res) => {
+    // Rychlá validace
     if (!req.body || !req.body.name) {
         return res.status(400).json({ error: "Missing data" });
     }
@@ -58,25 +58,29 @@ coursesRouter.post("/", (req, res) => {
         feed: []
     };
     courses.push(newCourse);
+    console.log(`[POST] Created course: ${newCourse.uuid}`);
     res.status(201).json(newCourse);
 });
 
-// GET /courses/:courseId (Detail)
+// --- GET DETAIL (Tady je problém) ---
 coursesRouter.get("/:courseId", (req, res) => {
     const { courseId } = req.params;
     const course = courses.find(c => c.uuid === courseId);
-    
     const accept = req.headers.accept || "";
 
-    // 1. ZJISTÍME, JESTLI CHCE HTML
-    if (accept.includes("text/html")) {
-        // Pokud kurz neexistuje, vrátíme vlastní HTML 404.
-        // Kdybychom tady nevrátili nic, Express by zobrazil tu "Hello TdA" stránku.
+    // DEBUG: Zjistíme přesně, proč to padá
+    console.log(`[GET DETAIL] ID: ${courseId}, Found: ${!!course}, Accept: ${accept}`);
+
+    // OTOČENÁ LOGIKA: Pokud v hlavičce NENÍ slovo "json", posíláme HTML.
+    // To zajistí, že prohlížeč (Puppeteer) vždy dostane HTML, i když pošle divné hlavičky.
+    if (!accept.includes("json")) {
+        // Pokud kurz neexistuje, musíme vrátit HTML chybu, jinak tam skočí "Hello TdA"
         if (!course) {
+            console.log("[GET DETAIL] 404 sending HTML error");
             return res.status(404).send("<html><body><h1>Course not found</h1></body></html>");
         }
 
-        // Pokud existuje, vrátíme detail
+        console.log("[GET DETAIL] Sending HTML content");
         const html = `
             <!DOCTYPE html>
             <html>
@@ -90,27 +94,23 @@ coursesRouter.get("/:courseId", (req, res) => {
         return res.send(html);
     }
 
-    // 2. JINAK JSON API
+    // API Logika
     if (!course) {
         return res.status(404).json({ error: "Not found" });
     }
     res.status(200).json(course);
 });
 
-// PUT /courses/:courseId
+// --- PUT ---
 coursesRouter.put("/:courseId", (req, res) => {
     const index = courses.findIndex(c => c.uuid === req.params.courseId);
     if (index === -1) return res.status(404).json({ error: "Not found" });
 
-    courses[index] = { 
-        ...courses[index], 
-        ...req.body, 
-        uuid: courses[index].uuid 
-    };
+    courses[index] = { ...courses[index], ...req.body, uuid: courses[index].uuid };
     res.status(200).json(courses[index]);
 });
 
-// DELETE /courses/:courseId
+// --- DELETE ---
 coursesRouter.delete("/:courseId", (req, res) => {
     const index = courses.findIndex(c => c.uuid === req.params.courseId);
     if (index === -1) return res.status(404).json({ error: "Not found" });
