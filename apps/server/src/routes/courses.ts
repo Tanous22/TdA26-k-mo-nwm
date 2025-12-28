@@ -12,18 +12,20 @@ interface Course {
     feed: string[];
 }
 
-// In-memory databáze
 const courses: Course[] = [];
 
-// Pomocná funkce pro ID
+// Bezpečné generování ID
 const generateId = () => {
     return crypto.randomBytes(16).toString("hex");
 };
 
 // GET /courses (Seznam)
 coursesRouter.get("/", (req, res) => {
-    // 1. Pokud klient akceptuje HTML (prohlížeč/test stránky), vrátíme HTML přednostně
-    if (req.accepts('html')) {
+    // Ruční kontrola hlavičky - spolehlivější pro testy než req.accepts()
+    const accept = req.headers.accept || "";
+    const isHtml = accept.includes("text/html");
+
+    if (isHtml) {
         const html = `
             <!DOCTYPE html>
             <html>
@@ -37,7 +39,7 @@ coursesRouter.get("/", (req, res) => {
         return res.send(html);
     }
     
-    // 2. Jinak vracíme JSON (pro API testy)
+    // JSON pro API
     res.status(200).json(courses);
 });
 
@@ -63,14 +65,17 @@ coursesRouter.post("/", (req, res) => {
 coursesRouter.get("/:courseId", (req, res) => {
     const { courseId } = req.params;
     const course = courses.find(c => c.uuid === courseId);
+    
+    // Ruční kontrola hlavičky
+    const accept = req.headers.accept || "";
+    const isHtml = accept.includes("text/html");
 
-    // Pokud kurz neexistuje
-    if (!course) {
-        return res.status(404).json({ error: "Not found" });
-    }
-
-    // 1. ZDE BYL PROBLÉM: Použijeme req.accepts('html') pro robustní detekci
-    if (req.accepts('html')) {
+    // Pokud chce HTML (prohlížeč)
+    if (isHtml) {
+        if (!course) {
+            // DŮLEŽITÉ: Vrátit HTML 404, aby se neaktivoval fallback "Hello TdA"
+            return res.status(404).send("<html><body><h1>Course not found</h1></body></html>");
+        }
         const html = `
             <!DOCTYPE html>
             <html>
@@ -84,7 +89,10 @@ coursesRouter.get("/:courseId", (req, res) => {
         return res.send(html);
     }
 
-    // 2. Jinak JSON
+    // Pokud chce JSON (API)
+    if (!course) {
+        return res.status(404).json({ error: "Not found" });
+    }
     res.status(200).json(course);
 });
 
@@ -96,7 +104,7 @@ coursesRouter.put("/:courseId", (req, res) => {
     courses[index] = { 
         ...courses[index], 
         ...req.body, 
-        uuid: courses[index].uuid // ID se nesmí měnit
+        uuid: courses[index].uuid 
     };
     res.status(200).json(courses[index]);
 });
