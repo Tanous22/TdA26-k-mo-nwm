@@ -1,8 +1,4 @@
 import mysql from "mysql2/promise";
+import { config } from "../db/config"; // Tady si to načte z toho nového souboru
 
-export const pool = mysql.createPool({
-	uri: process.env.DATABASE_URL,
-	waitForConnections: true,
-	connectionLimit: 10,
-	queueLimit: 0,
-});
+export const pool = mysql.createPool(config.db.url);
