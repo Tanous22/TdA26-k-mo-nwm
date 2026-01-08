@@ -16,7 +16,7 @@ export async function initDatabase() {
       )
     `);
 
-    // 2. Tabulka COURSES - persistentní uložení kurzů (konec s in-memory polem!) [cite: 25]
+    // 2. Tabulka COURSES - persistentní uložení kurzů (konec s in-memory polem!)
     await pool.execute(`
       CREATE TABLE IF NOT EXISTS courses (
         id INT AUTO_INCREMENT PRIMARY KEY,
@@ -25,6 +25,23 @@ export async function initDatabase() {
         description TEXT,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+      )
+    `);
+
+    // 3. Tabulka MATERIALS
+    await pool.execute(`
+      CREATE TABLE IF NOT EXISTS materials (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        uuid VARCHAR(36) NOT NULL UNIQUE,
+        course_id INT NOT NULL,
+        type VARCHAR(50) NOT NULL,
+        name VARCHAR(255) NOT NULL,
+        description TEXT,
+        content TEXT NOT NULL,
+        mime_type VARCHAR(100),
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+        FOREIGN KEY (course_id) REFERENCES courses(id) ON DELETE CASCADE
       )
     `);
 

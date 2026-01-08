@@ -1,15 +1,14 @@
-import { Router } from "express";
+import { Router, type Request, type Response } from "express";
 import crypto from "crypto";
-import { pool } from "../db/index.js"; // Importujeme pool pro DB spojení
+import { pool } from "../db/index.js";
 
 export const coursesRouter = Router();
 
-// Interface držíme pro TypeScript a frontend, i když v DB zatím máme jen část.
 interface Course {
     uuid: string;
     name: string;
     description: string;
-    materials: string[];
+    materials: any[];
     quizzes: string[];
     feed: string[];
 }
@@ -18,14 +17,11 @@ const generateId = () => {
     return crypto.randomBytes(16).toString("hex");
 };
 
-// GET /courses (Seznam všech kurzů z DB)
-coursesRouter.get("/", async (req, res) => {
+// GET /courses - Seznam kurzů
+coursesRouter.get("/", async (req: Request, res: Response) => {
     try {
-        // Vytáhneme data z DB
         const [rows] = await pool.execute("SELECT * FROM courses");
         
-        // Namapujeme DB řádky na formát, co čeká frontend (Course interface)
-        // Note: materials/quizzes/feed zatím v DB nejsou, vracíme prázdné pole, aby frontend nepadal.
         const courses = (rows as any[]).map(row => ({
             uuid: row.uuid,
             name: row.name,
@@ -35,21 +31,6 @@ coursesRouter.get("/", async (req, res) => {
             feed: [] 
         }));
 
-        // Podpora pro HTML request (pokud to testy nebo prohlížeč vyžadují)
-        const accept = req.headers.accept || "";
-        if (accept.includes("html")) {
-            return res.send(`
-                <!DOCTYPE html>
-                <html>
-                <body>
-                    <h1>Courses</h1>
-                    <ul>${courses.map((c: any) => `<li><a href="/courses/${c.uuid}">${c.name}</a></li>`).join('')}</ul>
-                </body>
-                </html>
-            `);
-        }
-
-        // Klasická JSON odpověď
         res.status(200).json(courses);
     } catch (error) {
         console.error("Error fetching courses:", error);
@@ -57,22 +38,23 @@ coursesRouter.get("/", async (req, res) => {
     }
 });
 
-// POST /courses (Vytvoření kurzu)
-coursesRouter.post("/", async (req, res) => {
-    if (!req.body || !req.body.name) return res.status(400).json({ error: "Missing data" });
+// POST /courses - Vytvoření kurzu
+coursesRouter.post("/", async (req: Request, res: Response) => {
+    if (!req.body || !req.body.name) {
+         res.status(400).json({ error: "Missing data" });
+         return;
+    }
 
     const uuid = generateId();
     const name = req.body.name;
     const description = req.body.description || "";
 
     try {
-        // INSERT do databáze
         await pool.execute(
             "INSERT INTO courses (uuid, name, description) VALUES (?, ?, ?)",
             [uuid, name, description]
         );
 
-        // Sestavíme objekt odpovědi
         const newCourse: Course = {
             uuid,
             name,
@@ -82,7 +64,6 @@ coursesRouter.post("/", async (req, res) => {
             feed: []
         };
         
-        console.log(`[POST] Uložen kurz do DB: ${name} (${uuid})`);
         res.status(201).json(newCourse);
     } catch (error) {
         console.error("Error creating course:", error);
@@ -90,47 +71,47 @@ coursesRouter.post("/", async (req, res) => {
     }
 });
 
-// GET /courses/:courseId (Detail kurzu)
-coursesRouter.get("/:courseId", async (req, res) => {
+// GET /courses/:courseId - Detail kurzu (VČETNĚ MATERIÁLŮ)
+coursesRouter.get("/:courseId", async (req: Request, res: Response) => {
     const { courseId } = req.params;
-    const accept = req.headers.accept || "";
 
     try {
-        // Hledáme podle UUID
+        // 1. Najdeme kurz
         const [rows] = await pool.execute("SELECT * FROM courses WHERE uuid = ?", [courseId]);
         const result = rows as any[];
-        const courseData = result[0]; // První nalezený
+        const courseData = result[0];
 
-        console.log(`[GET] Hledám ID: ${courseId}. Našel v DB? ${!!courseData}.`);
-
-        // Pokud v DB není -> 404
         if (!courseData) {
-            if (accept.includes("html")) {
-                return res.status(404).send("<html><body><h1>Course not found</h1></body></html>");
-            }
-            return res.status(404).json({ error: "Not found" });
+            res.status(404).json({ error: "Not found" });
+            return;
         }
 
-        // Pokud chce HTML
-        if (accept.includes("html")) {
-            const html = `
-                <!DOCTYPE html>
-                <html>
-                <head><title>${courseData.name}</title></head>
-                <body>
-                    <h1>${courseData.name}</h1> <p>${courseData.description}</p>
-                </body>
-                </html>
-            `;
-            return res.send(html);
-        }
+        // 2. Načteme materiály pro tento kurz (Test 8)
+        const [materialRows] = await pool.execute(
+            `SELECT uuid, type, name, description, content, mime_type 
+             FROM materials 
+             WHERE course_id = ? 
+             ORDER BY created_at DESC`,
+            [courseData.id]
+        );
 
-        // Pokud chce JSON -> vrátíme formát Course
+        // 3. Naformátujeme materiály
+        const materials = (materialRows as any[]).map(m => ({
+            uuid: m.uuid,
+            type: m.type,
+            name: m.name,
+            description: m.description,
+            mimeType: m.mime_type,
+            url: m.type === 'url' ? m.content : undefined,
+            fileUrl: m.type === 'file' ? `/uploads/${m.content}` : undefined
+        }));
+
+        // 4. Vrátíme kurz i s materiály
         const course: Course = {
             uuid: courseData.uuid,
             name: courseData.name,
             description: courseData.description,
-            materials: [],
+            materials: materials, // Zde vkládáme načtené materiály
             quizzes: [],
             feed: []
         };
@@ -142,25 +123,22 @@ coursesRouter.get("/:courseId", async (req, res) => {
     }
 });
 
-// PUT /courses/:courseId (Editace)
-coursesRouter.put("/:courseId", async (req, res) => {
+// PUT /courses/:courseId - Editace
+coursesRouter.put("/:courseId", async (req: Request, res: Response) => {
     const { courseId } = req.params;
     const { name, description } = req.body;
 
     try {
-        // UPDATE v DB
         const [result] = await pool.execute(
             "UPDATE courses SET name = ?, description = ? WHERE uuid = ?",
             [name, description, courseId]
         );
         
-        // Check, jestli se něco změnilo (affectedRows)
         if ((result as any).affectedRows === 0) {
-            return res.status(404).json({ error: "Not found or no change" });
+             res.status(404).json({ error: "Not found or no change" });
+             return;
         }
 
-        // Vrátíme aktualizovaná data (musíme je znovu načíst nebo složit)
-        // Pro rychlost jen složíme odpověď
         res.status(200).json({ 
             uuid: courseId, 
             name, 
@@ -173,14 +151,15 @@ coursesRouter.put("/:courseId", async (req, res) => {
     }
 });
 
-// DELETE /courses/:courseId (Mazání)
-coursesRouter.delete("/:courseId", async (req, res) => {
+// DELETE /courses/:courseId - Mazání
+coursesRouter.delete("/:courseId", async (req: Request, res: Response) => {
     const { courseId } = req.params;
     try {
         const [result] = await pool.execute("DELETE FROM courses WHERE uuid = ?", [courseId]);
         
         if ((result as any).affectedRows === 0) {
-            return res.status(404).json({ error: "Not found" });
+             res.status(404).json({ error: "Not found" });
+             return;
         }
         res.status(204).send();
     } catch (error) {

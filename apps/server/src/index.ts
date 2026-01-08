@@ -5,7 +5,7 @@ import { initDatabase } from "./db/init.js";
 import { userRoutes } from "./routes/users.js";
 import { materialsRouter } from "./routes/materials.js";
 // Importujeme router pro kurzy (musí odpovídat exportu v courses.ts)
-import { coursesRouter } from "./routes/courses.js"; 
+import { coursesRouter } from "../src/routes/courses.js"; 
 
 const app = express();
 

@@ -1,75 +1,218 @@
-import express from "express";
+import express, { type Request, type Response, type NextFunction } from "express";
 import multer from "multer";
 import { pool } from "../db/index.js";
 import { v4 as uuidv4 } from "uuid";
 
-// 1. Nastavení pro nahrávání souborů
+// 1. Nastavení Multer (Limit 30MB + Filter typů)
 const upload = multer({
-    dest: "uploads/", // Soubory se budou ukládat sem
+    dest: "uploads/",
     limits: { fileSize: 30 * 1024 * 1024 }, // Limit 30 MB
+    fileFilter: (req, file, cb) => {
+        // Ochrana proti .exe a nebezpečným souborům
+        if (file.mimetype === "application/x-msdownload" || file.originalname.endsWith(".exe")) {
+             return cb(new Error("UNSUPPORTED_FORMAT"));
+        }
+        cb(null, true);
+    }
 });
 
-// 2. mergeParams: true je NUTNÉ, abychom viděli ID kurzu z nadřazené URL
 export const materialsRouter = express.Router({ mergeParams: true });
 
+// Helper middleware pro odchycení chyb Multeru
+const handleUpload = (req: Request, res: Response, next: NextFunction) => {
+    upload.single("file")(req, res, (err) => {
+        if (err) {
+            return res.status(400).json({ error: err.message });
+        }
+        next();
+    });
+};
+
 // GET /courses/:courseId/materials - Seznam materiálů kurzu
-materialsRouter.get("/", async (req, res) => {
+materialsRouter.get("/", async (req: Request, res: Response) => {
     try {
-    const { courseId } = req.params as { courseId: string }; // Získáme UUID kurzu z URL
+        const { courseId } = req.params;
 
-    // Načteme materiály připojené k tomuto kurzu
-    // Používáme JOIN, protože v URL máme UUID, ale v tabulce materials je ID (číslo)
-    const [rows] = await pool.execute(
-        `SELECT m.id, m.uuid, m.type, m.name, m.content, m.created_at 
-        FROM materials m
-        JOIN courses c ON m.course_id = c.id
-        WHERE c.uuid = ? OR c.id = ?`,
-        [courseId, courseId]
-    );
+        // Získání ID kurzu
+        const [courses] = await pool.execute(
+            "SELECT id FROM courses WHERE uuid = ? OR id = ?",
+            [courseId, courseId]
+        );
 
-    res.json(rows);
+        if ((courses as any).length === 0) {
+            res.status(404).json({ error: "Kurz nenalezen" });
+            return;
+        }
+        const dbCourseId = (courses as any)[0].id;
+
+        // Načtení materiálů seřazených od nejnovějšího
+        const [rows] = await pool.execute(
+            `SELECT uuid, type, name, description, content, mime_type, created_at 
+             FROM materials 
+             WHERE course_id = ? 
+             ORDER BY created_at DESC`,
+            [dbCourseId]
+        );
+
+        // Mapování pro frontend
+        const materials = (rows as any).map((m: any) => ({
+            uuid: m.uuid,
+            type: m.type,
+            name: m.name,
+            description: m.description,
+            mimeType: m.mime_type,
+            url: m.type === 'url' ? m.content : undefined,
+            fileUrl: m.type === 'file' ? `/uploads/${m.content}` : undefined
+        }));
+
+        res.json(materials);
     } catch (error) {
-    console.error("Chyba GET materials:", error);
-    res.status(500).json({ error: "Chyba při načítání" });
+        console.error("Chyba GET materials:", error);
+        res.status(500).json({ error: "Chyba při načítání" });
     }
 });
 
-// POST /courses/:courseId/materials - Přidání materiálu (Soubor nebo Odkaz)
-materialsRouter.post("/", upload.single("file"), async (req, res) => {
+// POST /courses/:courseId/materials - Přidání materiálu
+materialsRouter.post("/", handleUpload, async (req: Request, res: Response) => {
     try {
-    const { courseId } = req.params as { courseId: string };;
-    const { type, name, content } = req.body;
-    const file = req.file;
+        const { courseId } = req.params;
+        const { type, name, description, url } = req.body;
+        const file = req.file;
 
-    // 1. Musíme zjistit číselné ID kurzu podle UUID
-    const [courses] = await pool.execute(
-        "SELECT id FROM courses WHERE uuid = ? OR id = ?",
-        [courseId, courseId]
-    );
+        // Validace
+        if (!type || !name) {
+             res.status(400).json({ error: "Chybí povinná pole" });
+             return;
+        }
 
-    if ((courses as any).length === 0) {
-        res.status(404).json({ error: "Kurz nenalezen" });
-        return;
-    }
-    const dbCourseId = (courses as any)[0].id;
+        // Získání ID kurzu
+        const [courses] = await pool.execute(
+            "SELECT id FROM courses WHERE uuid = ? OR id = ?",
+            [courseId, courseId]
+        );
 
-    // 2. Příprava dat k uložení
-    const newUuid = uuidv4();
-    let finalContent = content; // Pro odkazy
+        if ((courses as any).length === 0) {
+             res.status(404).json({ error: "Kurz nenalezen" });
+             return;
+        }
+        const dbCourseId = (courses as any)[0].id;
 
-    if (type === "file" && file) {
-      finalContent = file.filename; // Pro soubory ukládáme název na disku
-    }
+        // Příprava dat
+        const newUuid = uuidv4();
+        let content = "";
+        let mimeType = null;
 
-    // 3. Zápis do DB
-    await pool.execute(
-        "INSERT INTO materials (uuid, course_id, type, name, content) VALUES (?, ?, ?, ?, ?)",
-        [newUuid, dbCourseId, type, name, finalContent]
-    );
+        if (type === "url") {
+            content = url;
+        } else if (type === "file") {
+            if (!file) {
+                 res.status(400).json({ error: "Chybí soubor" });
+                 return;
+            }
+            content = file.filename;
+            mimeType = file.mimetype;
+        }
 
-    res.status(201).json({ message: "Materiál přidán", uuid: newUuid });
+        // Zápis do DB
+        await pool.execute(
+            `INSERT INTO materials (uuid, course_id, type, name, description, content, mime_type) 
+             VALUES (?, ?, ?, ?, ?, ?, ?)`,
+            [newUuid, dbCourseId, type, name, description, content, mimeType]
+        );
+
+        res.status(201).json({
+            uuid: newUuid,
+            type,
+            name,
+            description,
+            mimeType,
+            url: type === 'url' ? content : undefined,
+            fileUrl: type === 'file' ? `/uploads/${content}` : undefined
+        });
+
     } catch (error) {
-    console.error("Chyba POST materials:", error);
-    res.status(500).json({ error: "Chyba při ukládání" });
+        console.error("Chyba POST materials:", error);
+        res.status(500).json({ error: "Chyba při ukládání" });
+    }
+});
+
+// PUT /courses/:courseId/materials/:materialId - Úprava materiálu
+materialsRouter.put("/:materialId", handleUpload, async (req: Request, res: Response) => {
+    try {
+        const { materialId } = req.params;
+        const { name, description, url } = req.body;
+        const file = req.file;
+
+        // 1. Ověření existence materiálu
+        const [materials] = await pool.execute(
+            "SELECT * FROM materials WHERE uuid = ?",
+            [materialId]
+        );
+
+        if ((materials as any).length === 0) {
+             res.status(404).json({ error: "Materiál nenalezen" });
+             return;
+        }
+        const currentMaterial = (materials as any)[0];
+
+        // 2. Příprava změn
+        let newContent = currentMaterial.content;
+        let newMimeType = currentMaterial.mime_type;
+
+        // Pokud nahráváme nový soubor, přepíšeme obsah
+        if (file) {
+            newContent = file.filename;
+            newMimeType = file.mimetype;
+        } 
+        // Pokud měníme URL u typu 'url'
+        else if (currentMaterial.type === 'url' && url) {
+            newContent = url;
+        }
+
+        // 3. Update v DB
+        await pool.execute(
+            `UPDATE materials 
+             SET name = ?, description = ?, content = ?, mime_type = ?
+             WHERE uuid = ?`,
+            [name || currentMaterial.name, description || currentMaterial.description, newContent, newMimeType, materialId]
+        );
+
+        // 4. Vrácení aktualizovaných dat
+        res.json({
+            uuid: materialId,
+            type: currentMaterial.type,
+            name: name || currentMaterial.name,
+            description: description || currentMaterial.description,
+            mimeType: newMimeType,
+            url: currentMaterial.type === 'url' ? newContent : undefined,
+            fileUrl: currentMaterial.type === 'file' ? `/uploads/${newContent}` : undefined
+        });
+
+    } catch (error) {
+        console.error("Chyba PUT materials:", error);
+        res.status(500).json({ error: "Chyba při úpravě" });
+    }
+});
+
+// DELETE /courses/:courseId/materials/:materialId - Smazání materiálu
+materialsRouter.delete("/:materialId", async (req: Request, res: Response) => {
+    try {
+        const { materialId } = req.params;
+
+        // Smazání z DB
+        const [result] = await pool.execute(
+            "DELETE FROM materials WHERE uuid = ?",
+            [materialId]
+        );
+
+        if ((result as any).affectedRows === 0) {
+             res.status(404).json({ error: "Materiál nenalezen" });
+             return;
+        }
+
+        res.status(204).send();
+    } catch (error) {
+        console.error("Chyba DELETE materials:", error);
+        res.status(500).json({ error: "Chyba při mazání" });
     }
 });
