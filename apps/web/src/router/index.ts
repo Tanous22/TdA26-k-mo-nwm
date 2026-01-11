@@ -34,7 +34,7 @@ const router = createRouter({
 })
 
 // Navigation guard to protect authenticated routes
-router.beforeEach((to, from, next) => {
+router.beforeEach((to, _from, next) => {
   const requiresAuth = to.meta.requiresAuth
   const user = localStorage.getItem('user')
 
