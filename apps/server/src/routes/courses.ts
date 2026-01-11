@@ -1,5 +1,6 @@
 import { Router, type Request, type Response } from "express";
-import crypto from "crypto";
+// ODSTRANĚNO: import crypto from "crypto";
+import { v4 as uuidv4 } from "uuid"; // NOVÉ: Použijeme stejnou knihovnu jako v materials
 import { pool } from "../db/index.js";
 
 export const coursesRouter = Router();
@@ -13,14 +14,12 @@ interface Course {
     feed: string[];
 }
 
-const generateId = () => {
-    return crypto.randomBytes(16).toString("hex");
-};
+// ODSTRANĚNO: const generateId = ... (už nepotřebujeme vlastní funkci)
 
 // GET /courses - Seznam kurzů
 coursesRouter.get("/", async (req: Request, res: Response) => {
     try {
-        const [rows] = await pool.execute("SELECT * FROM courses");
+        const [rows] = await pool.execute("SELECT * FROM courses");   // predelat z * na konkrét
         
         const courses = (rows as any[]).map(row => ({
             uuid: row.uuid,
@@ -45,7 +44,7 @@ coursesRouter.post("/", async (req: Request, res: Response) => {
          return;
     }
 
-    const uuid = generateId();
+    const uuid = uuidv4(); // ZMĚNA: Generujeme pravé UUID v4
     const name = req.body.name;
     const description = req.body.description || "";
 
@@ -71,12 +70,11 @@ coursesRouter.post("/", async (req: Request, res: Response) => {
     }
 });
 
-// GET /courses/:courseId - Detail kurzu (VČETNĚ MATERIÁLŮ)
+// GET /courses/:courseId - Detail kurzu
 coursesRouter.get("/:courseId", async (req: Request, res: Response) => {
     const { courseId } = req.params;
 
     try {
-        // 1. Najdeme kurz
         const [rows] = await pool.execute("SELECT * FROM courses WHERE uuid = ?", [courseId]);
         const result = rows as any[];
         const courseData = result[0];
@@ -86,16 +84,14 @@ coursesRouter.get("/:courseId", async (req: Request, res: Response) => {
             return;
         }
 
-        // 2. Načteme materiály pro tento kurz (Test 8)
         const [materialRows] = await pool.execute(
             `SELECT uuid, type, name, description, content, mime_type 
-             FROM materials 
-             WHERE course_id = ? 
-             ORDER BY created_at DESC`,
+            FROM materials 
+            WHERE course_id = ? 
+            ORDER BY created_at DESC`,
             [courseData.id]
         );
 
-        // 3. Naformátujeme materiály
         const materials = (materialRows as any[]).map(m => ({
             uuid: m.uuid,
             type: m.type,
@@ -106,12 +102,11 @@ coursesRouter.get("/:courseId", async (req: Request, res: Response) => {
             fileUrl: m.type === 'file' ? `/uploads/${m.content}` : undefined
         }));
 
-        // 4. Vrátíme kurz i s materiály
         const course: Course = {
             uuid: courseData.uuid,
             name: courseData.name,
             description: courseData.description,
-            materials: materials, // Zde vkládáme načtené materiály
+            materials: materials,
             quizzes: [],
             feed: []
         };

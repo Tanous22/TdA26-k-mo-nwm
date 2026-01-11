@@ -29,7 +29,7 @@ userRoutes.post("/", async (req, res) => {
 		);
 
 		res.status(201).json({
-			id: result.insertId,
+			id: (result as any).insertId,
 			email,
 			name,
 		});

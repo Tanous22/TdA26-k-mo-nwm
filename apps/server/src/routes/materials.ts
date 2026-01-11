@@ -3,16 +3,36 @@ import multer from "multer";
 import { pool } from "../db/index.js";
 import { v4 as uuidv4 } from "uuid";
 
+const ALLOWED_MIME_TYPES = [
+    "application/pdf",                                                      // .pdf
+    "application/vnd.openxmlformats-officedocument.wordprocessingml.document", // .docx
+    "text/plain",                                                           // .txt
+    "image/png",                                                            // .png
+    "image/jpeg",                                                           // .jpg, .jpeg
+    "image/gif",                                                            // .gif
+    "video/mp4",                                                            // .mp4
+    "audio/mpeg"                                                            // .mp3
+];
+
 // 1. Nastavení Multer (Limit 30MB + Filter typů)
 const upload = multer({
     dest: "uploads/",
-    limits: { fileSize: 30 * 1024 * 1024 }, // Limit 30 MB
+    limits: { fileSize: 30 * 1024 * 1024 }, // 30 MB
     fileFilter: (req, file, cb) => {
-        // Ochrana proti .exe a nebezpečným souborům
-        if (file.mimetype === "application/x-msdownload" || file.originalname.endsWith(".exe")) {
-             return cb(new Error("UNSUPPORTED_FORMAT"));
+        // KROK 1: Kontrola MIME typu (co o sobě soubor tvrdí)
+        if (!ALLOWED_MIME_TYPES.includes(file.mimetype)) {
+            return cb(new Error("UNSUPPORTED_FORMAT"));
         }
-        cb(null, true);
+        
+        // KROK 2: Dvojitá kontrola přípony (pojistka)
+        // (Protože někdo může přejmenovat virus.exe na virus.jpg)
+        // V reálné produkci se kontrolují "magic numbers" (obsah souboru), ale pro soutěž stačí toto.
+        const allowedExtensions = /\.(pdf|docx|txt|png|jpg|jpeg|gif|mp4|mp3)$/i;
+        if (!file.originalname.match(allowedExtensions)) {
+            return cb(new Error("UNSUPPORTED_FORMAT"));
+        }
+
+        cb(null, true); // Prošlo kontrolou, povolujeme.
     }
 });
 
