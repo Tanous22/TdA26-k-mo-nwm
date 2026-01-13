@@ -1,30 +1,30 @@
 import { Router, type Request, type Response } from "express";
-// ODSTRANĚNO: import crypto from "crypto";
-import { v4 as uuidv4 } from "uuid"; // NOVÉ: Použijeme stejnou knihovnu jako v materials
+import { v4 as uuidv4 } from "uuid";
 import { pool } from "../db/index.js";
 
 export const coursesRouter = Router();
 
+// Interface pro TypeScript
 interface Course {
     uuid: string;
     name: string;
     description: string;
+    difficulty: string; 
     materials: any[];
     quizzes: string[];
     feed: string[];
 }
 
-// ODSTRANĚNO: const generateId = ... (už nepotřebujeme vlastní funkci)
-
 // GET /courses - Seznam kurzů
 coursesRouter.get("/", async (req: Request, res: Response) => {
     try {
-        const [rows] = await pool.execute("SELECT * FROM courses");   // predelat z * na konkrét
+        const [rows] = await pool.execute("SELECT * FROM courses");
         
         const courses = (rows as any[]).map(row => ({
             uuid: row.uuid,
             name: row.name,
             description: row.description,
+            difficulty: row.difficulty || "", // ZMĚNA: Fallback na prázdný string
             materials: [], 
             quizzes: [], 
             feed: [] 
@@ -44,20 +44,23 @@ coursesRouter.post("/", async (req: Request, res: Response) => {
          return;
     }
 
-    const uuid = uuidv4(); // ZMĚNA: Generujeme pravé UUID v4
+    const uuid = uuidv4();
     const name = req.body.name;
     const description = req.body.description || "";
+    // ZMĚNA: Pokud frontend nic nepošle, dáme prázdný string (db ošéfuje)
+    const difficulty = req.body.difficulty || ""; 
 
     try {
         await pool.execute(
-            "INSERT INTO courses (uuid, name, description) VALUES (?, ?, ?)",
-            [uuid, name, description]
+            "INSERT INTO courses (uuid, name, description, difficulty) VALUES (?, ?, ?, ?)",
+            [uuid, name, description, difficulty]
         );
 
         const newCourse: Course = {
             uuid,
             name,
             description,
+            difficulty, 
             materials: [],
             quizzes: [],
             feed: []
@@ -86,9 +89,9 @@ coursesRouter.get("/:courseId", async (req: Request, res: Response) => {
 
         const [materialRows] = await pool.execute(
             `SELECT uuid, type, name, description, content, mime_type 
-            FROM materials 
-            WHERE course_id = ? 
-            ORDER BY created_at DESC`,
+             FROM materials 
+             WHERE course_id = ? 
+             ORDER BY created_at DESC`,
             [courseData.id]
         );
 
@@ -106,6 +109,7 @@ coursesRouter.get("/:courseId", async (req: Request, res: Response) => {
             uuid: courseData.uuid,
             name: courseData.name,
             description: courseData.description,
+            difficulty: courseData.difficulty || "", // ZMĚNA: Fallback na prázdný string
             materials: materials,
             quizzes: [],
             feed: []
@@ -121,12 +125,12 @@ coursesRouter.get("/:courseId", async (req: Request, res: Response) => {
 // PUT /courses/:courseId - Editace
 coursesRouter.put("/:courseId", async (req: Request, res: Response) => {
     const { courseId } = req.params;
-    const { name, description } = req.body;
+    const { name, description, difficulty } = req.body; 
 
     try {
         const [result] = await pool.execute(
-            "UPDATE courses SET name = ?, description = ? WHERE uuid = ?",
-            [name, description, courseId]
+            "UPDATE courses SET name = ?, description = ?, difficulty = ? WHERE uuid = ?",
+            [name, description, difficulty || "", courseId] // ZMĚNA: Fallback na prázdný string
         );
         
         if ((result as any).affectedRows === 0) {
@@ -138,6 +142,7 @@ coursesRouter.put("/:courseId", async (req: Request, res: Response) => {
             uuid: courseId, 
             name, 
             description,
+            difficulty: difficulty || "", 
             materials: [], quizzes: [], feed: [] 
         });
     } catch (error) {

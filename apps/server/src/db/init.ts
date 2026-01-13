@@ -23,6 +23,7 @@ export async function initDatabase() {
         uuid VARCHAR(36) NOT NULL UNIQUE,
         name VARCHAR(255) NOT NULL,
         description TEXT,
+        difficulty VARCHAR(50) DEFAULT 'Začátečník',
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
       )
@@ -42,6 +43,48 @@ export async function initDatabase() {
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
         FOREIGN KEY (course_id) REFERENCES courses(id) ON DELETE CASCADE
+      )
+    `);
+
+    // 4. Tabulka QUIZZES (Kvízy)
+    await pool.execute(`
+      CREATE TABLE IF NOT EXISTS quizzes (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        uuid VARCHAR(36) NOT NULL UNIQUE,
+        course_id INT NOT NULL,
+        title VARCHAR(255) NOT NULL,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+        FOREIGN KEY (course_id) REFERENCES courses(id) ON DELETE CASCADE
+      )
+    `);
+
+    // 5. Tabulka QUIZ_QUESTIONS (Otázky)
+    await pool.execute(`
+      CREATE TABLE IF NOT EXISTS quiz_questions (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        uuid VARCHAR(36) NOT NULL UNIQUE,
+        quiz_id INT NOT NULL,
+        type ENUM('singleChoice', 'multipleChoice') NOT NULL,
+        question TEXT NOT NULL,
+        options JSON NOT NULL,          -- Pole textů: ["Odpověď A", "Odpověď B"]
+        correct_answer JSON NOT NULL,   -- Index (int) nebo pole indexů (array of ints)
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (quiz_id) REFERENCES quizzes(id) ON DELETE CASCADE
+      )
+    `);
+
+    // 6. Tabulka QUIZ_ATTEMPTS (Pokusy/Výsledky - anonymní)
+    await pool.execute(`
+      CREATE TABLE IF NOT EXISTS quiz_attempts (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        uuid VARCHAR(36) NOT NULL UNIQUE,
+        quiz_id INT NOT NULL,
+        score INT NOT NULL,
+        max_score INT NOT NULL,
+        answers JSON,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (quiz_id) REFERENCES quizzes(id) ON DELETE CASCADE
       )
     `);
 
