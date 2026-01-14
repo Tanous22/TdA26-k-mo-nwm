@@ -12,11 +12,10 @@
         </button>
 
         <h2 class="text-2xl font-extrabold mb-6 text-[#0070BB]">
-          Vytvořit nový kvíz
+          {{ editMode ? 'Upravit kvíz' : 'Vytvořit nový kvíz' }}
         </h2>
 
         <form @submit.prevent="saveQuiz" class="space-y-6">
-          <!-- Quiz Title -->
           <div>
             <label class="block font-bold mb-1 text-sm">Název kvízu</label>
             <input
@@ -28,7 +27,6 @@
             />
           </div>
 
-          <!-- Questions List -->
           <div class="space-y-6">
             <div
               v-for="(question, qIndex) in quizData.questions"
@@ -57,7 +55,6 @@
                 />
               </div>
 
-              <!-- Question Type Selection -->
               <div class="mb-3">
                 <span class="block text-sm font-semibold text-gray-600 mb-2">Typ otázky:</span>
                 <div class="grid grid-cols-2 gap-4">
@@ -111,7 +108,6 @@
                 </div>
               </div>
 
-              <!-- Options -->
               <div class="space-y-2 pl-2">
                 <label class="block text-xs font-bold text-gray-500 uppercase"
                   >Možnosti (označte správné)</label
@@ -121,7 +117,6 @@
                   :key="option.id"
                   class="flex items-center gap-3"
                 >
-                  <!-- Correct Toggle -->
                   <div class="flex-shrink-0" v-if="question.type === 'single'">
                     <input
                       type="radio"
@@ -139,7 +134,6 @@
                     />
                   </div>
 
-                  <!-- Option Text -->
                   <input
                     v-model="option.text"
                     required
@@ -177,7 +171,6 @@
             <span>Přidat další otázku</span>
           </button>
 
-          <!-- Error Message Banner -->
           <div v-if="errorMessage" class="bg-red-50 text-red-600 p-4 rounded-lg font-bold text-sm border border-red-200 flex items-center gap-2 animate-pulse">
             <span>⚠️</span>
             {{ errorMessage }}
@@ -185,7 +178,7 @@
 
           <div class="pt-4 border-t border-gray-100">
             <button type="submit" class="organic-btn w-full text-lg py-3">
-              Uložit kvíz
+              {{ editMode ? 'Uložit změny' : 'Vytvořit kvíz' }}
             </button>
           </div>
         </form>
@@ -215,8 +208,11 @@ export interface Quiz {
   questions: QuizQuestion[];
 }
 
-defineProps<{
+// ZMĚNA: Přidány chybějící props
+const props = defineProps<{
   show: boolean;
+  editMode?: boolean;
+  initialData?: any; // Používáme any pro zjednodušení mappingu, ideálně typ Quiz
 }>();
 
 const emit = defineEmits<{
@@ -228,7 +224,12 @@ const errorMessage = ref<string | null>(null);
 
 const quizData = reactive<Quiz>({
   title: "",
-  questions: [
+  questions: [],
+});
+
+const resetForm = () => {
+  quizData.title = "";
+  quizData.questions = [
     {
       id: crypto.randomUUID(),
       text: "",
@@ -238,7 +239,27 @@ const quizData = reactive<Quiz>({
         { id: crypto.randomUUID(), text: "", isCorrect: false },
       ],
     },
-  ],
+  ];
+};
+
+// ZMĚNA: Sledování otevření modalu pro načtení dat
+watch(() => props.show, (newVal) => {
+  if (newVal) {
+    errorMessage.value = null;
+    if (props.editMode && props.initialData) {
+      // Načtení dat pro editaci (hluboká kopie)
+      const data = JSON.parse(JSON.stringify(props.initialData));
+      quizData.title = data.title;
+      quizData.questions = data.questions.map((q: any) => ({
+        ...q,
+        id: q.id || crypto.randomUUID(),
+        options: q.options.map((o: any) => ({ ...o, id: o.id || crypto.randomUUID() }))
+      }));
+    } else {
+      // Reset pro nový kvíz
+      resetForm();
+    }
+  }
 });
 
 // Clear error when user makes changes
@@ -289,7 +310,6 @@ const removeOption = (qIndex: number, oIndex: number) => {
 const setCorrectOption = (qIndex: number, oIndex: number) => {
   const question = quizData.questions[qIndex];
   if (question && question.type === 'single') {
-    // For single choice, uncheck others and check this one
     question.options.forEach((opt, idx) => {
       opt.isCorrect = idx === oIndex;
     });
@@ -308,7 +328,7 @@ const validateQuiz = (): boolean => {
   }
   for (let i = 0; i < quizData.questions.length; i++) {
     const q = quizData.questions[i];
-    if (!q) continue; // Should not happen, but satisfies TS
+    if (!q) continue;
 
     if (!q.text.trim()) {
       errorMessage.value = `Otázka č. ${i + 1} nemá vyplněný text.`;
@@ -319,7 +339,6 @@ const validateQuiz = (): boolean => {
       errorMessage.value = `Otázka č. ${i + 1} nemá označenou správnou odpověď.`;
       return false;
     }
-    // Check for empty options
     const emptyOptions = q.options.some(o => !o.text.trim());
     if (emptyOptions) {
       errorMessage.value = `U otázky č. ${i + 1} máte nevyplněné možnosti.`;
@@ -331,27 +350,11 @@ const validateQuiz = (): boolean => {
 
 const saveQuiz = () => {
   if (!validateQuiz()) return;
-
-  // Deep copy to avoid reference issues
   emit("save", JSON.parse(JSON.stringify(quizData)));
-  
-  // Reset
-  quizData.title = "";
-  quizData.questions = [
-    {
-      id: crypto.randomUUID(),
-      text: "",
-      type: "single",
-      options: [
-        { id: crypto.randomUUID(), text: "", isCorrect: true },
-        { id: crypto.randomUUID(), text: "", isCorrect: false },
-      ],
-    },
-  ];
   errorMessage.value = null;
 };
 </script>
 
 <style scoped>
-/* No extra styles needed, using utility classes */
+/* No extra styles needed */
 </style>

@@ -1,10 +1,20 @@
 import { Router, type Request, type Response } from "express";
 import { v4 as uuidv4 } from "uuid";
 import { pool } from "../db/index.js";
+// NOVÉ IMPORTY:
+import { quizzesRouter } from "./quizzes.js";
+import { materialsRouter } from "./materials.js";
 
 export const coursesRouter = Router();
 
-// Pomocná funkce pro parsování JSONu z DB (stejná jako v quizzes.ts)
+// --- PROPOJENÍ POD-ROUTERŮ (TOHLE TU CHYBĚLO) ---
+// Všechny adresy začínající /:courseId/quizzes pošleme do quizzesRouter
+coursesRouter.use("/:courseId/quizzes", quizzesRouter);
+// Všechny adresy začínající /:courseId/materials pošleme do materialsRouter
+coursesRouter.use("/:courseId/materials", materialsRouter);
+// -----------------------------------------------
+
+// Pomocná funkce pro parsování JSONu z DB
 const parseJson = (data: any) => {
     if (typeof data === 'string') {
         try { return JSON.parse(data); } catch (e) { return []; }
@@ -19,7 +29,7 @@ interface Course {
     description: string;
     difficulty: string; 
     materials: any[];
-    quizzes: any[]; // Změna na any[], abychom tam mohli dát plný objekt kvízu
+    quizzes: any[];
     feed: any[];
 }
 
@@ -80,7 +90,7 @@ coursesRouter.post("/", async (req: Request, res: Response) => {
     }
 });
 
-// GET /courses/:courseId - Detail kurzu (VČETNĚ KVÍZŮ A MATERIÁLŮ)
+// GET /courses/:courseId - Detail kurzu (VČETNĚ KVÍZŮ A MATERIÁLŮ PRO ZOBRAZENÍ)
 coursesRouter.get("/:courseId", async (req: Request, res: Response) => {
     const { courseId } = req.params;
 
@@ -114,7 +124,7 @@ coursesRouter.get("/:courseId", async (req: Request, res: Response) => {
             fileUrl: m.type === 'file' ? `/uploads/${m.content}` : undefined
         }));
 
-        // 3. Načtení kvízů (NOVÉ - Oprava pro testy)
+        // 3. Načtení kvízů
         const [quizRows] = await pool.execute(
             `SELECT q.*, (SELECT COUNT(*) FROM quiz_attempts qa WHERE qa.quiz_id = q.id) as attemptsCount
              FROM quizzes q 
@@ -125,7 +135,6 @@ coursesRouter.get("/:courseId", async (req: Request, res: Response) => {
 
         const quizzes = [];
         for (const qRow of (quizRows as any[])) {
-            // Pro každý kvíz musíme načíst i otázky (protože Swagger CourseDetail -> Quiz -> questions)
             const [questionRows] = await pool.execute(
                 "SELECT * FROM quiz_questions WHERE quiz_id = ?",
                 [qRow.id]
@@ -156,8 +165,7 @@ coursesRouter.get("/:courseId", async (req: Request, res: Response) => {
             });
         }
 
-        // 4. Načtení feedu (Pokud existuje tabulka, jinak prázdné pole)
-        // Pro Fázi 3 zatím stačí prázdné pole, pokud tabulka feeds ještě není v DB stabilní
+        // 4. Feed (placeholder)
         let feed: any[] = [];
         try {
              const [feedRows] = await pool.execute(
@@ -173,7 +181,6 @@ coursesRouter.get("/:courseId", async (req: Request, res: Response) => {
                  updatedAt: f.updated_at
              }));
         } catch (e) {
-            // Pokud tabulka feeds neexistuje, ignorujeme to (Fáze 3)
             feed = [];
         }
 
@@ -183,7 +190,7 @@ coursesRouter.get("/:courseId", async (req: Request, res: Response) => {
             description: courseData.description,
             difficulty: courseData.difficulty || "",
             materials: materials,
-            quizzes: quizzes, // Zde už posíláme skutečné kvízy
+            quizzes: quizzes,
             feed: feed
         };
         res.status(200).json(course);

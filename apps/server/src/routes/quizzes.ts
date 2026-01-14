@@ -14,9 +14,15 @@ const parseJson = (data: any) => {
 };
 
 async function getCourseId(courseUuid: string): Promise<number | null> {
+    console.log(`[DEBUG-QUIZ] Resolving internal ID for course UUID: ${courseUuid}`);
     const [rows] = await pool.execute("SELECT id FROM courses WHERE uuid = ?", [courseUuid]);
-    if ((rows as any[]).length === 0) return null;
-    return (rows as any[])[0].id;
+    if ((rows as any[]).length === 0) {
+        console.warn(`[DEBUG-QUIZ] Course not found for UUID: ${courseUuid}`);
+        return null;
+    }
+    const id = (rows as any[])[0].id;
+    console.log(`[DEBUG-QUIZ] Found internal ID: ${id}`);
+    return id;
 }
 
 // --- ENDPOINTY ---
@@ -24,6 +30,7 @@ async function getCourseId(courseUuid: string): Promise<number | null> {
 // GET /courses/:courseId/quizzes - Seznam kvízů
 quizzesRouter.get("/", async (req: Request, res: Response) => {
     const { courseId } = req.params;
+    console.log(`[DEBUG-QUIZ] GET / for course ${courseId}`);
 
     try {
         const dbCourseId = await getCourseId(courseId);
@@ -76,17 +83,23 @@ quizzesRouter.get("/", async (req: Request, res: Response) => {
         res.status(200).json(quizzes);
 
     } catch (error) {
-        console.error("Error fetching quizzes:", error);
+        console.error("[DEBUG-QUIZ] Error fetching quizzes:", error);
         res.status(500).json({ error: "Database error" });
     }
 });
 
 // POST /courses/:courseId/quizzes - Vytvoření kvízu
 quizzesRouter.post("/", async (req: Request, res: Response) => {
+    console.log("--- [DEBUG-QUIZ] POST / HIT ---");
     const { courseId } = req.params;
     const { title, questions } = req.body;
 
+    console.log("Params courseId:", courseId);
+    console.log("Body title:", title);
+    console.log("Body questions count:", questions?.length);
+
     if (!title || !questions || !Array.isArray(questions)) {
+         console.error("[DEBUG-QUIZ] Validation failed: Missing title or questions is not array");
          res.status(400).json({ error: "Missing title or questions" });
          return;
     }
@@ -99,24 +112,33 @@ quizzesRouter.post("/", async (req: Request, res: Response) => {
         }
 
         const quizUuid = uuidv4();
+        console.log(`[DEBUG-QUIZ] Creating quiz '${title}' with UUID ${quizUuid}`);
+
         const [quizResult] = await pool.execute(
             "INSERT INTO quizzes (uuid, course_id, title) VALUES (?, ?, ?)",
             [quizUuid, dbCourseId, title]
         );
         const newQuizId = (quizResult as any).insertId;
+        console.log(`[DEBUG-QUIZ] Quiz created, internal ID: ${newQuizId}`);
 
-        // ZMĚNA: Ukládáme si otázky i s novým UUID, abychom je vrátili v odpovědi
         const savedQuestions = [];
 
-        for (const q of questions) {
+        for (const [index, q] of questions.entries()) {
             const qUuid = uuidv4();
             let correctAnswer: any = null;
             
+            console.log(`[DEBUG-QUIZ] Processing question ${index + 1} (${q.type})`);
+
             if (q.type === 'singleChoice') {
                 correctAnswer = q.correctIndex; 
             } else if (q.type === 'multipleChoice') {
                 correctAnswer = q.correctIndices;
             }
+
+            // Log what we are about to insert
+            const optionsStr = JSON.stringify(q.options);
+            const correctStr = JSON.stringify(correctAnswer);
+            console.log(`[DEBUG-QUIZ] Inserting question: type=${q.type}, options=${optionsStr}, answer=${correctStr}`);
 
             await pool.execute(
                 `INSERT INTO quiz_questions (uuid, quiz_id, type, question, options, correct_answer) 
@@ -126,24 +148,25 @@ quizzesRouter.post("/", async (req: Request, res: Response) => {
                     newQuizId, 
                     q.type, 
                     q.question, 
-                    JSON.stringify(q.options), 
-                    JSON.stringify(correctAnswer)
+                    optionsStr, 
+                    correctStr
                 ]
             );
             
-            // Přidáme do pole pro odpověď
             savedQuestions.push({ ...q, uuid: qUuid });
         }
+
+        console.log("[DEBUG-QUIZ] All questions inserted successfully.");
 
         res.status(201).json({
             uuid: quizUuid,
             title,
             attemptsCount: 0,
-            questions: savedQuestions // Vracíme otázky s UUID
+            questions: savedQuestions
         });
 
     } catch (error) {
-        console.error("Error creating quiz:", error);
+        console.error("[DEBUG-QUIZ] CRITICAL ERROR creating quiz:", error);
         res.status(500).json({ error: "Database error" });
     }
 });
@@ -196,7 +219,7 @@ quizzesRouter.get("/:quizId", async (req: Request, res: Response) => {
         });
 
     } catch (error) {
-        console.error("Error fetching quiz detail:", error);
+        console.error("[DEBUG-QUIZ] Error fetching quiz detail:", error);
         res.status(500).json({ error: "Database error" });
     }
 });
@@ -205,11 +228,13 @@ quizzesRouter.get("/:quizId", async (req: Request, res: Response) => {
 quizzesRouter.put("/:quizId", async (req: Request, res: Response) => {
     const { quizId } = req.params;
     const { title, questions } = req.body;
+    console.log(`[DEBUG-QUIZ] PUT /${quizId} HIT`);
 
     try {
         const [rows] = await pool.execute("SELECT id FROM quizzes WHERE uuid = ?", [quizId]);
         const quizData = (rows as any[])[0];
         if (!quizData) {
+            console.warn(`[DEBUG-QUIZ] Quiz not found for update: ${quizId}`);
             res.status(404).json({ error: "Quiz not found" });
             return;
         }
@@ -218,7 +243,6 @@ quizzesRouter.put("/:quizId", async (req: Request, res: Response) => {
         await pool.execute("UPDATE quizzes SET title = ? WHERE id = ?", [title, dbQuizId]);
         await pool.execute("DELETE FROM quiz_questions WHERE quiz_id = ?", [dbQuizId]);
 
-        // ZMĚNA: Opět si ukládáme otázky s novým UUID pro odpověď
         const savedQuestions = [];
 
         for (const q of questions) {
@@ -238,15 +262,17 @@ quizzesRouter.put("/:quizId", async (req: Request, res: Response) => {
         const [countRows] = await pool.execute("SELECT COUNT(*) as count FROM quiz_attempts WHERE quiz_id = ?", [dbQuizId]);
         const count = (countRows as any)[0].count;
 
+        console.log(`[DEBUG-QUIZ] Update successful for ${quizId}`);
+
         res.status(200).json({ 
             uuid: quizId, 
             title, 
             attemptsCount: count,
-            questions: savedQuestions // Vracíme otázky s UUID
+            questions: savedQuestions
         });
 
     } catch (error) {
-        console.error("Error updating quiz:", error);
+        console.error("[DEBUG-QUIZ] Error updating quiz:", error);
         res.status(500).json({ error: "Database error" });
     }
 });
