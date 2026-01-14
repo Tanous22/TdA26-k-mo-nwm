@@ -100,7 +100,8 @@ import { useAuth } from '../composables/useAuth';
 
 const route = useRoute();
 const { user } = useAuth();
-const courseId = route.params.uuid as string; // FIXED: matches router config
+// Robust ID extraction handling both :courseId and :uuid conventions
+const courseId = (route.params.courseId || route.params.uuid) as string;
 const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:3000';
 
 const loading = ref(true);
@@ -122,7 +123,7 @@ const getMaterialIcon = (mat: any) => {
 const fetchData = async () => {
   try {
     loading.value = true;
-    console.log(`Fetching course: ${courseId}`);
+    console.log(`[CourseDetail] Using Course ID: ${courseId}`); // Debug log
     const response = await fetch(`${apiUrl}/courses/${courseId}`);
     if (!response.ok) throw new Error('Failed to fetch course');
     const data = await response.json();
@@ -210,8 +211,6 @@ const deleteQuiz = async (quizUuid: string) => {
 };
 
 const handleQuizSave = async (quizData: any) => {
-  console.log("Saving quiz payload:", quizData);
-  
   // Transformace dat: Frontend (single/multiple) -> Backend (singleChoice/multipleChoice)
   const backendQuestions = quizData.questions.map((q: any) => {
     let correctIndex = undefined;
@@ -227,7 +226,8 @@ const handleQuizSave = async (quizData: any) => {
     }
 
     return {
-      type: q.type === 'single' ? 'singleChoice' : 'multipleChoice', // PŘEKLAD TYPU
+      // Explicit mapping for Backend Enum requirements
+      type: q.type === 'single' ? 'singleChoice' : 'multipleChoice',
       question: q.text,
       options: q.options.map((opt: any) => opt.text),
       correctIndex,
@@ -235,24 +235,35 @@ const handleQuizSave = async (quizData: any) => {
     };
   });
 
+  const payload = {
+    title: quizData.title,
+    questions: backendQuestions
+  };
+
+  const url = editingQuiz.value 
+    ? `${apiUrl}/courses/${courseId}/quizzes/${editingQuiz.value.uuid}` 
+    : `${apiUrl}/courses/${courseId}/quizzes`;
+
+  console.log("Saving Quiz to:", url);
+  console.log("Payload:", JSON.stringify(payload, null, 2));
+
   try {
-    const url = editingQuiz.value 
-      ? `${apiUrl}/courses/${courseId}/quizzes/${editingQuiz.value.uuid}` 
-      : `${apiUrl}/courses/${courseId}/quizzes`;
-    
     const res = await fetch(url, {
       method: editingQuiz.value ? 'PUT' : 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ title: quizData.title, questions: backendQuestions })
+      body: JSON.stringify(payload)
     });
 
-    if (!res.ok) throw new Error(await res.text());
+    if (!res.ok) {
+        const errorText = await res.text();
+        throw new Error(`Server error: ${res.status} ${res.statusText} - ${errorText}`);
+    }
     
     closeQuizModal();
     await fetchData(); 
     alert("Kvíz byl úspěšně uložen.");
   } catch (e: any) {
-    console.error(e);
+    console.error("Quiz Save Failed:", e);
     alert(`Nepodařilo se uložit kvíz: ${e.message}`);
   }
 };

@@ -134,7 +134,7 @@ const fetchCourses = async () => {
 };
 
 const viewCourse = (course: Course) => {
-  router.push({ name: "course-detail", params: { uuid: course.uuid } });
+  router.push({ name: "course-detail", params: { courseId: course.uuid } });
 };
 
 onMounted(() => {

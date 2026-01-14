@@ -16,7 +16,7 @@ const routes: RouteRecordRaw[] = [
     component: CoursesView
   },
   {
-    path: '/courses/:uuid',
+    path: '/courses/:courseId',
     name: 'course-detail',
     component: () => import('../views/CourseDetailView.vue')
   },
