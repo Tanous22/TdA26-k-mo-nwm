@@ -6,7 +6,6 @@ export const quizzesRouter = Router({ mergeParams: true });
 
 // --- POMOCNÉ FUNKCE ---
 
-// Bezpečné parsování JSONu z databáze (kdyby to DB vrátila jako string)
 const parseJson = (data: any) => {
     if (typeof data === 'string') {
         try { return JSON.parse(data); } catch (e) { return []; }
@@ -33,7 +32,6 @@ quizzesRouter.get("/", async (req: Request, res: Response) => {
             return;
         }
 
-        // 1. Načteme kvízy a rovnou spočítáme pokusy (attemptsCount)
         const [quizRows] = await pool.execute(`
             SELECT q.*, (SELECT COUNT(*) FROM quiz_attempts qa WHERE qa.quiz_id = q.id) as attemptsCount
             FROM quizzes q 
@@ -70,7 +68,7 @@ quizzesRouter.get("/", async (req: Request, res: Response) => {
             quizzes.push({
                 uuid: qRow.uuid,
                 title: qRow.title,
-                attemptsCount: qRow.attemptsCount || 0, // ZMĚNA: Přidáno attemptsCount podle Swaggeru
+                attemptsCount: qRow.attemptsCount || 0,
                 questions: questions
             });
         }
@@ -107,6 +105,9 @@ quizzesRouter.post("/", async (req: Request, res: Response) => {
         );
         const newQuizId = (quizResult as any).insertId;
 
+        // ZMĚNA: Ukládáme si otázky i s novým UUID, abychom je vrátili v odpovědi
+        const savedQuestions = [];
+
         for (const q of questions) {
             const qUuid = uuidv4();
             let correctAnswer: any = null;
@@ -129,14 +130,16 @@ quizzesRouter.post("/", async (req: Request, res: Response) => {
                     JSON.stringify(correctAnswer)
                 ]
             );
+            
+            // Přidáme do pole pro odpověď
+            savedQuestions.push({ ...q, uuid: qUuid });
         }
 
-        // Odpověď musí obsahovat strukturu Quiz vč. attemptsCount
         res.status(201).json({
             uuid: quizUuid,
             title,
             attemptsCount: 0,
-            questions
+            questions: savedQuestions // Vracíme otázky s UUID
         });
 
     } catch (error) {
@@ -150,7 +153,6 @@ quizzesRouter.get("/:quizId", async (req: Request, res: Response) => {
     const { quizId } = req.params;
 
     try {
-        // Získat kvíz + počet pokusů
         const [rows] = await pool.execute(`
             SELECT q.*, (SELECT COUNT(*) FROM quiz_attempts qa WHERE qa.quiz_id = q.id) as attemptsCount 
             FROM quizzes q 
@@ -189,7 +191,7 @@ quizzesRouter.get("/:quizId", async (req: Request, res: Response) => {
         res.status(200).json({
             uuid: quizData.uuid,
             title: quizData.title,
-            attemptsCount: quizData.attemptsCount || 0, // ZMĚNA: Přidáno attemptsCount
+            attemptsCount: quizData.attemptsCount || 0,
             questions: questions
         });
 
@@ -216,6 +218,9 @@ quizzesRouter.put("/:quizId", async (req: Request, res: Response) => {
         await pool.execute("UPDATE quizzes SET title = ? WHERE id = ?", [title, dbQuizId]);
         await pool.execute("DELETE FROM quiz_questions WHERE quiz_id = ?", [dbQuizId]);
 
+        // ZMĚNA: Opět si ukládáme otázky s novým UUID pro odpověď
+        const savedQuestions = [];
+
         for (const q of questions) {
             const qUuid = uuidv4();
             let correctAnswer: any = null;
@@ -227,9 +232,9 @@ quizzesRouter.put("/:quizId", async (req: Request, res: Response) => {
                  VALUES (?, ?, ?, ?, ?, ?)`,
                 [qUuid, dbQuizId, q.type, q.question, JSON.stringify(q.options), JSON.stringify(correctAnswer)]
             );
+            savedQuestions.push({ ...q, uuid: qUuid });
         }
 
-        // Musíme zjistit aktuální attemptsCount pro odpověď
         const [countRows] = await pool.execute("SELECT COUNT(*) as count FROM quiz_attempts WHERE quiz_id = ?", [dbQuizId]);
         const count = (countRows as any)[0].count;
 
@@ -237,7 +242,7 @@ quizzesRouter.put("/:quizId", async (req: Request, res: Response) => {
             uuid: quizId, 
             title, 
             attemptsCount: count,
-            questions 
+            questions: savedQuestions // Vracíme otázky s UUID
         });
 
     } catch (error) {
@@ -286,9 +291,6 @@ quizzesRouter.post("/:quizId/submit", async (req: Request, res: Response) => {
         const maxScore = dbQuestions.length;
         const correctPerQuestion: boolean[] = [];
 
-        // Seřadit otázky z DB podle pořadí vložení (nebo podle UUID, pokud na tom záleží - Swagger pořadí neřeší explicitně, ale mapování ano)
-        // Pro správné correctPerQuestion musíme iterovat otázky tak, jak jsou v kvízu.
-        
         for (const dbQ of dbQuestions) {
             const correctAnswer = parseJson(dbQ.correct_answer);
             const userAnswer = answers.find((a: any) => a.uuid === dbQ.uuid);
