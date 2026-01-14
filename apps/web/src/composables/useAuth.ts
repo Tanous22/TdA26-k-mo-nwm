@@ -1,7 +1,9 @@
 import { ref } from 'vue'
 
 export interface User {
-    name: string
+    id?: number | string;
+    name: string;
+    email: string; // <-- Toto ti tam chybělo
     role: string
 }
 
