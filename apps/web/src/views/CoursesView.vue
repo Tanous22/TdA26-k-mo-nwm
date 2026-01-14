@@ -81,6 +81,9 @@ interface Course {
   category?: string;
 }
 
+// ZMĚNA: Definice API URL s fallbackem (zajišťuje, že se nepoužije "undefined")
+const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:3000';
+
 const searchQuery = ref("");
 const router = useRouter();
 const activeCategory = ref("Všechny");
@@ -110,7 +113,10 @@ const fetchCourses = async () => {
   try {
     loading.value = true;
     error.value = "";
-    const response = await fetch(`${import.meta.env.VITE_API_URL}/courses`);
+    
+    // ZMĚNA: Použití apiUrl proměnné
+    const response = await fetch(`${apiUrl}/courses`);
+    
     if (!response.ok) throw new Error("Failed to fetch courses");
     const data = await response.json();
 
