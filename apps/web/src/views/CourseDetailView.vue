@@ -39,6 +39,12 @@
             >
               + Přidat
             </button>
+            <input 
+              type="file" 
+              ref="fileInput" 
+              class="hidden" 
+              @change="handleFileUpload" 
+            />
           </div>
 
           <div v-if="course.materials.length === 0" class="text-center py-12 text-gray-400">
@@ -180,6 +186,7 @@
       <div class="bg-white rounded-2xl shadow-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto p-8 animate-slide-up">
         <QuizRunner 
           :quiz="activeQuiz" 
+          :courseId="courseId"
           @close="activeQuiz = null" 
           @cancel="activeQuiz = null"
         />
@@ -203,19 +210,50 @@ import QuizRunner, { type Quiz } from '../components/QuizRunner.vue';
 import QuizModal from '../components/QuizModal.vue';
 
 const route = useRoute();
-const courseId = route.params.uuid;
+const courseId = route.params.uuid as string;
 
 // State
 const activeQuiz = ref<Quiz | null>(null);
 const showQuizModal = ref(false);
 
-// Mock Data
-const course = ref<any>({
+interface Material {
+  id: string; // Adjusted to match potential API or frontend usage. API says uuid, UI uses id/uuid mixed maybe? The UI template uses `mat.id`.
+  uuid?: string;
+  type: string;
+  name: string;
+  description: string;
+  url?: string;
+  fileUrl?: string; // API might return this
+  format?: string;
+  size?: string;
+}
+
+interface FeedItem {
+  id: string;
+  type: 'post' | 'event';
+  author?: string;
+  content: string;
+  timestamp: string | Date;
+}
+
+interface Course {
+  uuid: string;
+  name: string;
+  description: string;
+  created?: string | Date; // API might not return this, handled in template
+  difficulty?: string;
+  materials: Material[];
+  quizzes: Quiz[];
+  feed: FeedItem[];
+}
+
+const course = ref<Course>({
+  uuid: '',
   name: "Načítání...",
   description: "",
   created: new Date(),
   materials: [],
-  quizzes: [] as Quiz[],
+  quizzes: [],
   feed: []
 });
 
@@ -227,6 +265,7 @@ const isTeacher = computed(() => {
 
 // Methods
 const formatDate = (date: any) => {
+  if (!date) return '';
   return new Intl.DateTimeFormat('cs-CZ').format(new Date(date));
 };
 
@@ -237,8 +276,64 @@ const getMaterialIcon = (mat: any) => {
   return '📁';
 };
 
+const fileInput = ref<HTMLInputElement | null>(null);
+
 const addMaterial = () => {
-  alert("Funkce přidání materiálu bude implementována.");
+  const type = prompt("Chcete přidat odkaz (zadejte 'link') nebo soubor (zadejte 'file')?");
+  if (!type) return;
+
+  if (type.toLowerCase() === 'link') {
+    const name = prompt("Zadejte název odkazu:");
+    const url = prompt("Zadejte URL odkazu:");
+    if (name && url) {
+      addLink(name, url);
+    }
+  } else if (type.toLowerCase() === 'file') {
+    fileInput.value?.click();
+  } else {
+    alert("Neplatná volba. Zadejte 'link' nebo 'file'.");
+  }
+};
+
+const addLink = async (name: string, urlStr: string) => {
+  try {
+    const response = await fetch(`${import.meta.env.VITE_API_URL}/courses/${courseId}/materials`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ type: "url", name, url: urlStr })
+    });
+    if (!response.ok) throw new Error("Failed to add link");
+    await fetchCourseData();
+    alert("Odkaz byl úspěšně přidán.");
+  } catch (e) {
+    console.error("Error adding link:", e);
+    alert("Nepodařilo se přidat odkaz.");
+  }
+};
+
+const handleFileUpload = async (event: Event) => {
+  const target = event.target as HTMLInputElement;
+  if (target.files && target.files.length > 0) {
+    const file = target.files[0];
+    const formData = new FormData();
+    formData.append("file", file);
+    formData.append("type", "file");
+
+    try {
+      const response = await fetch(`${import.meta.env.VITE_API_URL}/courses/${courseId}/materials`, {
+         method: "POST",
+         body: formData
+      });
+      if (!response.ok) throw new Error("Failed to upload file");
+      await fetchCourseData();
+      alert("Soubor byl úspěšně nahrán.");
+    } catch (e) {
+      console.error("Error uploading file:", e);
+      alert("Nepodařilo se nahrát soubor.");
+    } finally {
+       if (fileInput.value) fileInput.value.value = "";
+    }
+  }
 };
 
 const openQuizModal = () => {
@@ -255,53 +350,103 @@ const editQuiz = (quiz: Quiz) => {
   alert("Úprava kvízu: " + quiz.title);
 };
 
-const handleQuizSave = (quizData: any) => {
-  // Mock save
-  course.value.quizzes.unshift({
-    id: crypto.randomUUID(),
-    ...quizData,
-    attempts: 0
-  });
-  
-  // Add feed event
-  course.value.feed.unshift({
-    id: crypto.randomUUID(),
-    type: 'event',
-    content: `Nový kvíz: ${quizData.title}`,
-    timestamp: new Date()
-  });
-  
-  showQuizModal.value = false;
+const fetchCourseData = async () => {
+  try {
+    const response = await fetch(`${import.meta.env.VITE_API_URL}/courses/${courseId}`);
+    if (!response.ok) {
+      throw new Error('Failed to fetch course');
+    }
+    const data = await response.json();
+    
+    course.value = {
+      uuid: data.uuid,
+      name: data.name,
+      description: data.description,
+      created: data.created ? new Date(data.created) : new Date(), 
+      materials: data.materials.map((m: any) => ({
+        ...m,
+        id: m.uuid,
+        url: m.url || m.fileUrl
+      })),
+      quizzes: data.quizzes.map((q: any) => ({
+        ...q,
+        id: q.uuid,
+        attempts: q.attemptsCount || 0
+      })),
+      feed: [] 
+    };
+  } catch (e) {
+    console.error('Error fetching course:', e);
+    course.value.name = "Chyba při načítání kurzu";
+    course.value.description = "Nepodařilo se načíst data kurzu.";
+  }
+};
+
+const handleQuizSave = async (quizData: any) => {
+  console.log("Saving quiz...", quizData);
+  try {
+    // Transform data for backend
+    const payload = {
+      title: quizData.title,
+      questions: quizData.questions.map((q: any) => {
+        const optionsText = q.options.map((o: any) => o.text);
+        
+        // Determine correct indices
+        let correctIndex = undefined;
+        let correctIndices = undefined;
+
+        if (q.type === 'single') {
+          correctIndex = q.options.findIndex((o: any) => o.isCorrect);
+        } else {
+          correctIndices = q.options
+            .map((o: any, index: number) => o.isCorrect ? index : -1)
+            .filter((i: number) => i !== -1);
+        }
+
+        return {
+          type: q.type === 'single' ? 'singleChoice' : 'multipleChoice',
+          question: q.text, // Backend expects 'question', frontend has 'text'
+          options: optionsText,
+          correctIndex,
+          correctIndices
+        };
+      })
+    };
+
+    console.log("Transformed payload:", payload);
+
+    const url = quizData.uuid 
+      ? `${import.meta.env.VITE_API_URL}/courses/${courseId}/quizzes/${quizData.uuid}`
+      : `${import.meta.env.VITE_API_URL}/courses/${courseId}/quizzes`;
+      
+    const method = quizData.uuid ? 'PUT' : 'POST';
+
+    const response = await fetch(url, {
+      method,
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify(payload)
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(`Failed to save quiz: ${response.status} ${response.statusText} - ${errorText}`);
+    }
+
+    // Refresh data and close modal
+    await fetchCourseData();
+    showQuizModal.value = false;
+    alert("Kvíz byl úspěšně uložen.");
+
+  } catch (e: any) {
+    console.error("Error saving quiz:", e);
+    alert(`Nepodařilo se uložit kvíz: ${e.message}`);
+  }
 };
 
 onMounted(async () => {
-  // Simulator fetch delay
-  setTimeout(() => {
-    course.value = {
-      uuid: courseId,
-      name: "Úvod do programování",
-      description: "Naučte se základy programování od úplného začátku. Kurz vhodný pro všechny bez předchozích zkušeností.",
-      created: new Date('2024-01-15'),
-      materials: [
-        { id: 'm1', type: 'file', name: 'Základy syntaxe.pdf', description: 'PDF průvodce základními koncepty', format: 'pdf', size: '2.5 MB' },
-        { id: 'm2', type: 'link', name: 'Online dokumentace', description: 'Oficiální dokumentace jazyka', url: 'https://docs.python.org' }
-      ],
-      quizzes: [
-        {
-          id: 'q1',
-          title: 'Základní koncepty',
-          questions: [
-            { id: '1', text: 'Co je to proměnná?', type: 'single', options: [{ id: 'o1', text: 'Místo v paměti', isCorrect: true }, { id: 'o2', text: 'Funkce', isCorrect: false }] }
-          ],
-          attempts: 24
-        }
-      ],
-      feed: [
-        { id: 'f1', type: 'post', author: 'Lektor', content: 'Vítejte v kurzu! Těším se na společnou práci.', timestamp: new Date('2024-01-15') },
-         { id: 'f2', type: 'event', content: 'Nový materiál: Základy syntaxe.pdf', timestamp: new Date('2024-01-16') }
-      ]
-    };
-  }, 500);
+  await fetchCourseData();
 });
 </script>
 

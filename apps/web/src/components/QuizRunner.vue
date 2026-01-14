@@ -98,6 +98,8 @@ export interface Question {
 }
 
 export interface Quiz {
+  id?: string; // Frontend often uses id for loop keys
+  uuid?: string; // Backend identifier
   title: string;
   questions: Question[];
   attempts?: number;
@@ -109,12 +111,14 @@ import { ref, computed } from 'vue';
 
 const props = defineProps<{
   quiz: Quiz;
+  courseId: string;
 }>();
 
 const emit = defineEmits(['close', 'cancel']);
 
 const answers = ref<Record<string, number[]>>({});
 const submitted = ref(false);
+const result = ref<{ score: number, maxScore: number } | null>(null);
 
 const isSelected = (qId: string, oIndex: number) => {
   return answers.value[qId]?.includes(oIndex);
@@ -140,26 +144,53 @@ const toggleAnswer = (qId: string, oIndex: number, type: 'single' | 'multiple') 
 };
 
 const score = computed(() => {
-  let points = 0;
-  props.quiz.questions.forEach((q) => {
-    const userAns = answers.value[q.id] || [];
-    
-    const correctIndices = q.options
-      .map((opt, idx) => opt.isCorrect ? idx : -1)
-      .filter((idx) => idx !== -1);
-
-    if (
-      userAns.length === correctIndices.length &&
-      userAns.every((idx) => correctIndices.includes(idx))
-    ) {
-      points++;
-    }
-  });
-  return points;
+  return result.value?.score ?? 0;
 });
 
-const submitQuiz = () => {
-  submitted.value = true;
+const submitQuiz = async () => {
+  try {
+    const payload = {
+      answers: props.quiz.questions.map(q => {
+        const userAns = answers.value[q.id];
+        if (!userAns || userAns.length === 0) return null;
+
+        if (q.type === 'single') {
+          return {
+             uuid: q.id,
+             selectedIndex: userAns[0]
+          };
+        } else {
+           return {
+             uuid: q.id,
+             selectedIndices: userAns
+           };
+        }
+      }).filter(a => a !== null)
+    };
+
+    const response = await fetch(`${import.meta.env.VITE_API_URL}/courses/${props.courseId}/quizzes/${props.quiz.uuid || props.quiz.id}/submit`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify(payload)
+    });
+
+    if (!response.ok) {
+        throw new Error('Failed to submit quiz');
+    }
+
+    const data = await response.json();
+    result.value = {
+        score: data.score,
+        maxScore: data.maxScore
+    };
+    submitted.value = true;
+
+  } catch (e) {
+      console.error("Error submitting quiz:", e);
+      alert("Chyba při odesílání kvízu.");
+  }
 };
 </script>
 

@@ -48,6 +48,12 @@
         >
           {{ error }}
         </div>
+        <div
+          v-else-if="filteredCourses.length === 0"
+          class="col-span-full text-center text-gray-500 font-bold py-12"
+        >
+          Zatím žádné kurzy
+        </div>
         <CourseCard
           v-else
           v-for="(course, index) in filteredCourses"
@@ -104,13 +110,15 @@ const fetchCourses = async () => {
   try {
     loading.value = true;
     error.value = "";
-    const response = await fetch("/api/courses");
+    const response = await fetch(`${import.meta.env.VITE_API_URL}/courses`);
     if (!response.ok) throw new Error("Failed to fetch courses");
     const data = await response.json();
 
     // Přidáme defaultní hodnoty pro vizuální zobrazení
-    courses.value = data.map((course: Course, index: number) => ({
-      ...course,
+    courses.value = data.map((course: any, index: number) => ({
+      uuid: course.uuid,
+      name: course.name,
+      description: course.description,
       difficulty:
         course.difficulty || ["Začátečník", "Pokročilý", "Expert"][index % 3],
       color: ["#91F5AD", "#0070BB", "#FF6B6B", "#FFD93D"][index % 4],
