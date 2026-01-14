@@ -86,28 +86,28 @@
 <script setup lang="ts">
 import { ref, computed } from 'vue';
 
-// Definice TypeScript rozhraní pro odstranění chyb
-interface Option {
+export interface Option {
   id: string;
   text: string;
-  isCorrect?: boolean;
+  isCorrect?: boolean; // Optional because it might not be visible to the user immediately, but used in logic
 }
 
-interface Question {
+export interface Question {
   id: string;
   text: string;
   type: 'single' | 'multiple';
   options: Option[];
 }
 
-interface Quiz {
+export interface Quiz {
+  id: string;
   title: string;
   questions: Question[];
   attempts?: number;
 }
 
 const props = defineProps<{
-  quiz: Quiz;
+  quiz: Quiz; 
 }>();
 
 const emit = defineEmits(['close', 'cancel']);
@@ -141,10 +141,13 @@ const toggleAnswer = (qId: string, oIndex: number, type: 'single' | 'multiple') 
 const score = computed(() => {
   let points = 0;
   props.quiz.questions.forEach((q) => {
+  props.quiz.questions.forEach((q) => {
     const userAns = answers.value[q.id] || [];
     
     // Nyní TypeScript ví, že q.options je pole Option[]
     const correctIndices = q.options
+      .map((opt, idx) => opt.isCorrect ? idx : -1)
+      .filter((idx) => idx !== -1);
       .map((opt, idx) => opt.isCorrect ? idx : -1)
       .filter((idx) => idx !== -1);
 

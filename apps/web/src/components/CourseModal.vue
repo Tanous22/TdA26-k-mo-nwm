@@ -6,7 +6,7 @@
       >
         <button
           @click="close"
-          class="absolute top-4 right-4 text-gray-400 hover:text-red-500 font-bold text-xl"
+          class="absolute top-4 right-4 text-gray-400 hover:text-red-500 font-bold text-6xl"
         >
           &times;
         </button>
@@ -150,7 +150,7 @@
                 <button
                   type="button"
                   @click="removeMaterial(index)"
-                  class="text-red-500 hover:text-red-700 p-1 font-bold"
+                  class="text-red-500 hover:text-red-700 p-1 font-bold text-4xl"
                 >
                   &times;
                 </button>

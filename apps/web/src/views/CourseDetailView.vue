@@ -21,10 +21,10 @@
     </div>
 
     <!-- Main Content -->
-    <div class="flex-1 max-w-7xl mx-auto w-full p-6 grid grid-cols-1 lg:grid-cols-3 gap-8 -mt-8 relative z-20">
+    <div class="flex-1 max-w-7xl mx-auto w-full p-6 grid grid-cols-1 gap-8 -mt-8 relative z-20">
       
       <!-- Left Column: Materials & Feed -->
-      <div class="lg:col-span-2 space-y-8">
+      <div class="space-y-8">
         
         <!-- Materials Section -->
         <div class="bg-white rounded-2xl shadow-sm border border-gray-100 p-8">
@@ -78,51 +78,8 @@
           </div>
         </div>
 
-        <!-- Feed Section -->
+        <!-- Quizzes Section -->
         <div class="bg-white rounded-2xl shadow-sm border border-gray-100 p-8">
-          <h2 class="text-2xl font-bold text-gray-800 mb-6 flex items-center gap-2">
-            📢 Novinky
-          </h2>
-          
-           <div class="space-y-6 relative before:absolute before:left-4 before:top-4 before:bottom-4 before:w-0.5 before:bg-gray-100">
-             <div v-for="post in course.feed" :key="post.id" class="relative pl-10">
-               <!-- Timeline dot -->
-               <div class="absolute left-2.5 top-1.5 w-3 h-3 rounded-full border-2 border-white shadow-sm"
-                 :class="post.type === 'post' ? 'bg-[#0070BB]' : 'bg-[#91F5AD]'"
-               ></div>
-               
-               <div class="bg-gray-50 rounded-xl p-4 border border-gray-100">
-                 <div class="flex justify-between items-start mb-2">
-                   <span class="font-bold text-gray-900">{{ post.author || 'Systém' }}</span>
-                   <span class="text-xs text-gray-400">{{ formatDate(post.timestamp) }}</span>
-                 </div>
-                 <p class="text-gray-600">{{ post.content }}</p>
-               </div>
-             </div>
-             
-             <div v-if="course.feed.length === 0" class="text-center py-8 text-gray-400 pl-0">
-               Žádné novinky
-             </div>
-           </div>
-           
-           <!-- Add Post (Teacher only) -->
-           <div v-if="isTeacher" class="mt-6 pt-6 border-t border-gray-100">
-             <textarea 
-               placeholder="Napište zprávu pro studenty..."
-               class="w-full p-3 rounded-lg border border-gray-200 focus:border-[#0070BB] focus:ring-1 focus:ring-[#0070BB] outline-none transition-all resize-none"
-               rows="2"
-             ></textarea>
-             <div class="flex justify-end mt-2">
-               <button class="organic-btn text-sm px-4 py-2">Odeslat</button>
-             </div>
-           </div>
-        </div>
-
-      </div>
-
-      <!-- Right Column: Quizzes -->
-      <div class="space-y-8">
-        <div class="bg-white rounded-2xl shadow-sm border border-gray-100 p-8 sticky top-8">
           <div class="flex items-center justify-between mb-6">
             <h2 class="text-2xl font-bold text-gray-800 flex items-center gap-2">
               ✏️ Kvízy
@@ -171,7 +128,50 @@
             </div>
           </div>
         </div>
+
+        <!-- Feed Section -->
+        <div class="bg-white rounded-2xl shadow-sm border border-gray-100 p-8">
+          <h2 class="text-2xl font-bold text-gray-800 mb-6 flex items-center gap-2">
+            📢 Novinky
+          </h2>
+          
+           <div class="space-y-6 relative before:absolute before:left-4 before:top-4 before:bottom-4 before:w-0.5 before:bg-gray-100">
+             <div v-for="post in course.feed" :key="post.id" class="relative pl-10">
+               <!-- Timeline dot -->
+               <div class="absolute left-2.5 top-1.5 w-3 h-3 rounded-full border-2 border-white shadow-sm"
+                 :class="post.type === 'post' ? 'bg-[#0070BB]' : 'bg-[#91F5AD]'"
+               ></div>
+               
+               <div class="bg-gray-50 rounded-xl p-4 border border-gray-100">
+                 <div class="flex justify-between items-start mb-2">
+                   <span class="font-bold text-gray-900">{{ post.author || 'Systém' }}</span>
+                   <span class="text-xs text-gray-400">{{ formatDate(post.timestamp) }}</span>
+                 </div>
+                 <p class="text-gray-600">{{ post.content }}</p>
+               </div>
+             </div>
+             
+             <div v-if="course.feed.length === 0" class="text-center py-8 text-gray-400 pl-0">
+               Žádné novinky
+             </div>
+           </div>
+           
+           <!-- Add Post (Teacher only) -->
+           <div v-if="isTeacher" class="mt-6 pt-6 border-t border-gray-100">
+             <textarea 
+               placeholder="Napište zprávu pro studenty..."
+               class="w-full p-3 rounded-lg border border-gray-200 focus:border-[#0070BB] focus:ring-1 focus:ring-[#0070BB] outline-none transition-all resize-none"
+               rows="2"
+             ></textarea>
+             <div class="flex justify-end mt-2">
+               <button class="organic-btn text-sm px-4 py-2">Odeslat</button>
+             </div>
+           </div>
+        </div>
+
       </div>
+
+
     </div>
 
     <!-- Modals -->
@@ -199,14 +199,14 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue';
 import { useRoute } from 'vue-router';
-import QuizRunner from '../components/QuizRunner.vue';
+import QuizRunner, { type Quiz } from '../components/QuizRunner.vue';
 import QuizModal from '../components/QuizModal.vue';
 
 const route = useRoute();
 const courseId = route.params.uuid;
 
 // State
-const activeQuiz = ref<any>(null);
+const activeQuiz = ref<Quiz | null>(null);
 const showQuizModal = ref(false);
 
 // Mock Data
@@ -215,7 +215,7 @@ const course = ref<any>({
   description: "",
   created: new Date(),
   materials: [],
-  quizzes: [],
+  quizzes: [] as Quiz[],
   feed: []
 });
 
@@ -245,11 +245,11 @@ const openQuizModal = () => {
   showQuizModal.value = true;
 };
 
-const startQuiz = (quiz: any) => {
+const startQuiz = (quiz: Quiz) => {
   activeQuiz.value = quiz;
 };
 
-const editQuiz = (quiz: any) => {
+const editQuiz = (quiz: Quiz) => {
   // Populate modal with quiz data (requires Update to QuizModal to accept props)
   // For now, just a placeholder
   alert("Úprava kvízu: " + quiz.title);

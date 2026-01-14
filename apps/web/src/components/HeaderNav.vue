@@ -52,7 +52,7 @@
 <script setup lang="ts">
 import { useRoute } from "vue-router";
 
-const props = defineProps<{
+defineProps<{
   user: { name: string; role: string } | null;
 }>();
 
