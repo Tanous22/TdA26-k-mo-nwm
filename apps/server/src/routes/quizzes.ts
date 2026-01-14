@@ -2,12 +2,18 @@ import { Router, type Request, type Response } from "express";
 import { v4 as uuidv4 } from "uuid";
 import { pool } from "../db/index.js";
 
-// Důležité: mergeParams zajistí, že uvidíme :courseId z nadřazeného routeru
 export const quizzesRouter = Router({ mergeParams: true });
 
 // --- POMOCNÉ FUNKCE ---
 
-// Funkce pro získání ID kurzu z UUID (protože v URL je UUID, ale v DB potřebujeme ID)
+// Bezpečné parsování JSONu z databáze (kdyby to DB vrátila jako string)
+const parseJson = (data: any) => {
+    if (typeof data === 'string') {
+        try { return JSON.parse(data); } catch (e) { return []; }
+    }
+    return data;
+};
+
 async function getCourseId(courseUuid: string): Promise<number | null> {
     const [rows] = await pool.execute("SELECT id FROM courses WHERE uuid = ?", [courseUuid]);
     if ((rows as any[]).length === 0) return null;
@@ -16,57 +22,60 @@ async function getCourseId(courseUuid: string): Promise<number | null> {
 
 // --- ENDPOINTY ---
 
-// GET /courses/:courseId/quizzes - Seznam kvízů v kurzu
+// GET /courses/:courseId/quizzes - Seznam kvízů
 quizzesRouter.get("/", async (req: Request, res: Response) => {
     const { courseId } = req.params;
 
     try {
         const dbCourseId = await getCourseId(courseId);
         if (!dbCourseId) {
-            res.status(404).json({ error: "Kurz nenalezen" });
+            res.status(404).json({ error: "Course not found" });
             return;
         }
 
-        // 1. Načteme všechny kvízy
-        const [quizRows] = await pool.execute(
-            "SELECT * FROM quizzes WHERE course_id = ? ORDER BY created_at DESC",
-            [dbCourseId]
-        );
+        // 1. Načteme kvízy a rovnou spočítáme pokusy (attemptsCount)
+        const [quizRows] = await pool.execute(`
+            SELECT q.*, (SELECT COUNT(*) FROM quiz_attempts qa WHERE qa.quiz_id = q.id) as attemptsCount
+            FROM quizzes q 
+            WHERE q.course_id = ? 
+            ORDER BY q.created_at DESC
+        `, [dbCourseId]);
 
         const quizzes = [];
 
-        // 2. Pro každý kvíz musíme načíst i jeho otázky (Swagger to vyžaduje)
         for (const qRow of (quizRows as any[])) {
             const [questionRows] = await pool.execute(
                 "SELECT * FROM quiz_questions WHERE quiz_id = ?",
                 [qRow.id]
             );
 
-            // Mapování otázek z DB formátu do API formátu
             const questions = (questionRows as any[]).map(q => {
+                const options = parseJson(q.options);
+                const correctAnswer = parseJson(q.correct_answer);
+
                 const base = {
                     uuid: q.uuid,
                     type: q.type,
                     question: q.question,
-                    options: q.options, // MySQL driver to automaticky parsuje z JSONu
+                    options: options, 
                 };
                 
-                // Přidání správné odpovědi podle typu
                 if (q.type === 'singleChoice') {
-                    return { ...base, correctIndex: q.correct_answer };
+                    return { ...base, correctIndex: correctAnswer };
                 } else {
-                    return { ...base, correctIndices: q.correct_answer };
+                    return { ...base, correctIndices: correctAnswer };
                 }
             });
 
             quizzes.push({
                 uuid: qRow.uuid,
                 title: qRow.title,
+                attemptsCount: qRow.attemptsCount || 0, // ZMĚNA: Přidáno attemptsCount podle Swaggeru
                 questions: questions
             });
         }
 
-        res.json(quizzes);
+        res.status(200).json(quizzes);
 
     } catch (error) {
         console.error("Error fetching quizzes:", error);
@@ -80,18 +89,17 @@ quizzesRouter.post("/", async (req: Request, res: Response) => {
     const { title, questions } = req.body;
 
     if (!title || !questions || !Array.isArray(questions)) {
-         res.status(400).json({ error: "Chybí název nebo otázky" });
+         res.status(400).json({ error: "Missing title or questions" });
          return;
     }
 
     try {
         const dbCourseId = await getCourseId(courseId);
         if (!dbCourseId) {
-            res.status(404).json({ error: "Kurz nenalezen" });
+            res.status(404).json({ error: "Course not found" });
             return;
         }
 
-        // 1. Vytvoříme Kvíz
         const quizUuid = uuidv4();
         const [quizResult] = await pool.execute(
             "INSERT INTO quizzes (uuid, course_id, title) VALUES (?, ?, ?)",
@@ -99,10 +107,8 @@ quizzesRouter.post("/", async (req: Request, res: Response) => {
         );
         const newQuizId = (quizResult as any).insertId;
 
-        // 2. Vložíme Otázky
         for (const q of questions) {
             const qUuid = uuidv4();
-            // Zjistíme, co uložit jako "correct_answer" (číslo nebo pole čísel)
             let correctAnswer: any = null;
             
             if (q.type === 'singleChoice') {
@@ -125,10 +131,11 @@ quizzesRouter.post("/", async (req: Request, res: Response) => {
             );
         }
 
-        // Vrátíme vytvořený objekt (pro jednoduchost vracíme to, co přišlo + uuid)
+        // Odpověď musí obsahovat strukturu Quiz vč. attemptsCount
         res.status(201).json({
             uuid: quizUuid,
             title,
+            attemptsCount: 0,
             questions
         });
 
@@ -138,43 +145,51 @@ quizzesRouter.post("/", async (req: Request, res: Response) => {
     }
 });
 
-// GET /courses/:courseId/quizzes/:quizId - Detail kvízu
+// GET /courses/:courseId/quizzes/:quizId - Detail
 quizzesRouter.get("/:quizId", async (req: Request, res: Response) => {
     const { quizId } = req.params;
 
     try {
-        // 1. Najdeme kvíz
-        const [rows] = await pool.execute("SELECT * FROM quizzes WHERE uuid = ?", [quizId]);
+        // Získat kvíz + počet pokusů
+        const [rows] = await pool.execute(`
+            SELECT q.*, (SELECT COUNT(*) FROM quiz_attempts qa WHERE qa.quiz_id = q.id) as attemptsCount 
+            FROM quizzes q 
+            WHERE q.uuid = ?
+        `, [quizId]);
+        
         const quizData = (rows as any[])[0];
 
         if (!quizData) {
-            res.status(404).json({ error: "Kvíz nenalezen" });
+            res.status(404).json({ error: "Quiz not found" });
             return;
         }
 
-        // 2. Najdeme otázky
         const [questionRows] = await pool.execute(
             "SELECT * FROM quiz_questions WHERE quiz_id = ?",
             [quizData.id]
         );
 
         const questions = (questionRows as any[]).map(q => {
+            const options = parseJson(q.options);
+            const correctAnswer = parseJson(q.correct_answer);
+
             const base = {
                 uuid: q.uuid,
                 type: q.type,
                 question: q.question,
-                options: q.options,
+                options: options,
             };
             if (q.type === 'singleChoice') {
-                return { ...base, correctIndex: q.correct_answer };
+                return { ...base, correctIndex: correctAnswer };
             } else {
-                return { ...base, correctIndices: q.correct_answer };
+                return { ...base, correctIndices: correctAnswer };
             }
         });
 
-        res.json({
+        res.status(200).json({
             uuid: quizData.uuid,
             title: quizData.title,
+            attemptsCount: quizData.attemptsCount || 0, // ZMĚNA: Přidáno attemptsCount
             questions: questions
         });
 
@@ -184,26 +199,21 @@ quizzesRouter.get("/:quizId", async (req: Request, res: Response) => {
     }
 });
 
-// PUT /courses/:courseId/quizzes/:quizId - Editace kvízu
+// PUT - Update kvízu
 quizzesRouter.put("/:quizId", async (req: Request, res: Response) => {
     const { quizId } = req.params;
     const { title, questions } = req.body;
 
     try {
-        // 1. Získáme ID kvízu
         const [rows] = await pool.execute("SELECT id FROM quizzes WHERE uuid = ?", [quizId]);
         const quizData = (rows as any[])[0];
         if (!quizData) {
-            res.status(404).json({ error: "Kvíz nenalezen" });
+            res.status(404).json({ error: "Quiz not found" });
             return;
         }
         const dbQuizId = quizData.id;
 
-        // 2. Aktualizujeme název
         await pool.execute("UPDATE quizzes SET title = ? WHERE id = ?", [title, dbQuizId]);
-
-        // 3. Aktualizujeme otázky 
-        // Strategie: Smažeme staré a vložíme nové (nejjednodušší řešení pro update struktury)
         await pool.execute("DELETE FROM quiz_questions WHERE quiz_id = ?", [dbQuizId]);
 
         for (const q of questions) {
@@ -219,7 +229,16 @@ quizzesRouter.put("/:quizId", async (req: Request, res: Response) => {
             );
         }
 
-        res.json({ uuid: quizId, title, questions });
+        // Musíme zjistit aktuální attemptsCount pro odpověď
+        const [countRows] = await pool.execute("SELECT COUNT(*) as count FROM quiz_attempts WHERE quiz_id = ?", [dbQuizId]);
+        const count = (countRows as any)[0].count;
+
+        res.status(200).json({ 
+            uuid: quizId, 
+            title, 
+            attemptsCount: count,
+            questions 
+        });
 
     } catch (error) {
         console.error("Error updating quiz:", error);
@@ -227,17 +246,16 @@ quizzesRouter.put("/:quizId", async (req: Request, res: Response) => {
     }
 });
 
-// DELETE /courses/:courseId/quizzes/:quizId - Smazání
+// DELETE
 quizzesRouter.delete("/:quizId", async (req: Request, res: Response) => {
     const { quizId } = req.params;
     try {
         const [result] = await pool.execute("DELETE FROM quizzes WHERE uuid = ?", [quizId]);
         
         if ((result as any).affectedRows === 0) {
-             res.status(404).json({ error: "Kvíz nenalezen" });
+             res.status(404).json({ error: "Quiz not found" });
              return;
         }
-        // Díky ON DELETE CASCADE v databázi se smažou i otázky a pokusy
         res.status(204).send();
     } catch (error) {
         console.error("Error deleting quiz:", error);
@@ -245,17 +263,16 @@ quizzesRouter.delete("/:quizId", async (req: Request, res: Response) => {
     }
 });
 
-// POST /courses/:courseId/quizzes/:quizId/submit - Odevzdání a vyhodnocení
+// SUBMIT
 quizzesRouter.post("/:quizId/submit", async (req: Request, res: Response) => {
     const { quizId } = req.params;
-    const { answers } = req.body; // Pole odpovědí od uživatele
+    const { answers } = req.body;
 
     try {
-        // 1. Načteme kvíz a SPRÁVNÉ odpovědi z DB
         const [rows] = await pool.execute("SELECT id FROM quizzes WHERE uuid = ?", [quizId]);
         const quizData = (rows as any[])[0];
         if (!quizData) {
-            res.status(404).json({ error: "Kvíz nenalezen" });
+            res.status(404).json({ error: "Quiz not found" });
             return;
         }
 
@@ -265,23 +282,23 @@ quizzesRouter.post("/:quizId/submit", async (req: Request, res: Response) => {
         );
         const dbQuestions = questionRows as any[];
 
-        // 2. Vyhodnocení
         let score = 0;
         const maxScore = dbQuestions.length;
         const correctPerQuestion: boolean[] = [];
 
-        // Projdeme otázky z DB a hledáme k nim odpověď od uživatele
+        // Seřadit otázky z DB podle pořadí vložení (nebo podle UUID, pokud na tom záleží - Swagger pořadí neřeší explicitně, ale mapování ano)
+        // Pro správné correctPerQuestion musíme iterovat otázky tak, jak jsou v kvízu.
+        
         for (const dbQ of dbQuestions) {
+            const correctAnswer = parseJson(dbQ.correct_answer);
             const userAnswer = answers.find((a: any) => a.uuid === dbQ.uuid);
             let isCorrect = false;
 
             if (userAnswer) {
                 if (dbQ.type === 'singleChoice') {
-                    // Porovnáme indexy (DB: 1 vs User: 1)
-                    isCorrect = dbQ.correct_answer === userAnswer.selectedIndex;
+                    isCorrect = correctAnswer === userAnswer.selectedIndex;
                 } else if (dbQ.type === 'multipleChoice') {
-                    // Porovnáme pole. Musíme je seřadit a převést na string pro snadné porovnání.
-                    const dbArr = (dbQ.correct_answer as number[]).sort().toString();
+                    const dbArr = (correctAnswer as number[]).sort().toString();
                     const userArr = (userAnswer.selectedIndices as number[] || []).sort().toString();
                     isCorrect = dbArr === userArr;
                 }
@@ -291,7 +308,6 @@ quizzesRouter.post("/:quizId/submit", async (req: Request, res: Response) => {
             correctPerQuestion.push(isCorrect);
         }
 
-        // 3. Uložíme výsledek (Pokus)
         const attemptUuid = uuidv4();
         await pool.execute(
             `INSERT INTO quiz_attempts (uuid, quiz_id, score, max_score, answers) 
@@ -299,8 +315,7 @@ quizzesRouter.post("/:quizId/submit", async (req: Request, res: Response) => {
             [attemptUuid, quizData.id, score, maxScore, JSON.stringify(answers)]
         );
 
-        // 4. Vrátíme výsledek
-        res.json({
+        res.status(200).json({
             quizUuid: quizId,
             score,
             maxScore,
