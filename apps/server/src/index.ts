@@ -4,14 +4,14 @@ import express from "express";
 import { initDatabase } from "./db/init.js";
 import { userRoutes } from "./routes/users.js";
 import { materialsRouter } from "./routes/materials.js";
-// Importujeme router pro kurzy (musí odpovídat exportu v courses.ts)
 import { coursesRouter } from "./routes/courses.js";
 import { quizzesRouter } from "./routes/quizzes.js";
 
 const app = express();
+const port = process.env.PORT || 3000;
 
 app.use(cors());
-// DŮLEŽITÉ: Toto musí být PŘED definicí rout, jinak nebude fungovat POST (req.body bude undefined)
+// DŮLEŽITÉ: Musí být před definicí rout
 app.use(express.json());
 
 const apiRoutes = express.Router();
@@ -21,31 +21,39 @@ apiRoutes.get("/", (_req, res) => {
   res.status(200).json({ organization: "Student Cyber Games" });
 });
 
-// Vše připojíme na root
-app.use("/", apiRoutes);
+// -----------------------------------------------------------
+// 1. SPECIFICKÉ ROUTY (Musí být PRVNÍ!)
+// -----------------------------------------------------------
 
-// Připojení uživatelů
-apiRoutes.use("/users", userRoutes);
-
-// Připojení kurzů - toto vyřeší Phase 1 testy
-apiRoutes.use("/courses", coursesRouter);
-
-// Tady říkáme: Když URL začíná /courses/.../materials, předej to našemu routeru
-apiRoutes.use("/courses/:courseId/materials", materialsRouter);
-
-// Quizzes
+// Kvízy - specifická cesta musí mít přednost
 apiRoutes.use("/courses/:courseId/quizzes", quizzesRouter);
 
-const port = process.env.PORT || 3000;
+// Materiály - specifická cesta musí mít přednost
+apiRoutes.use("/courses/:courseId/materials", materialsRouter);
+
+
+// -----------------------------------------------------------
+// 2. OBECNÉ ROUTY (Až potom)
+// -----------------------------------------------------------
+
+// Kurzy
+apiRoutes.use("/courses", coursesRouter);
+
+// Uživatelé
+apiRoutes.use("/users", userRoutes);
+
+
+// Připojení routeru k aplikaci
+app.use("/", apiRoutes);
 
 async function start() {
-  // Try-catch kolem DB, aby server naskočil i když DB selže (pro testy kurzů DB nepotřebujeme)
   try {
     await initDatabase();
+    console.log("Database initialized successfully");
   } catch (e) {
     console.error("Database connection failed, but starting server anyway:", e);
   }
-  
+
   app.listen(port, () => {
     console.log(`Server is running on port ${port}`);
   });

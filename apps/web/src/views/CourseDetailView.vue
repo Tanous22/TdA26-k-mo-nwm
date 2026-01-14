@@ -174,13 +174,21 @@ const handleAddLink = async () => {
   if (!name) return;
 
   try {
-    await fetch(`${apiUrl}/courses/${courseId}/materials`, {
+    const res = await fetch(`${apiUrl}/courses/${courseId}/materials`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ type: 'url', name, url })
     });
+
+    if (!res.ok) {
+        const errorText = await res.text();
+        throw new Error(errorText || res.statusText);
+    }
+
     await fetchData();
-  } catch (e) { alert("Chyba při ukládání odkazu."); }
+  } catch (e: any) { 
+    alert(`Chyba: ${e.message}`); 
+  }
 };
 
 const triggerFileUpload = () => fileInput.value?.click();
@@ -193,10 +201,21 @@ const handleFileUpload = async (event: Event) => {
   formData.append('type', 'file');
 
   try {
-    await fetch(`${apiUrl}/courses/${courseId}/materials`, { method: 'POST', body: formData });
+    const res = await fetch(`${apiUrl}/courses/${courseId}/materials`, { 
+        method: 'POST', 
+        body: formData 
+    });
+
+    if (!res.ok) {
+        const errorText = await res.text();
+        throw new Error(errorText || res.statusText);
+    }
+
     await fetchData();
     alert("Soubor byl úspěšně nahrán");
-  } catch (e) { alert("Chyba při nahrávání souboru."); }
+  } catch (e: any) { 
+      alert(`Chyba při nahrávání: ${e.message}`); 
+  }
 };
 
 const openQuizModal = () => { editingQuiz.value = null; showQuizModal.value = true; };
