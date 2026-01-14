@@ -83,28 +83,29 @@
   </div>
 </template>
 
-<script setup lang="ts">
-import { ref, computed } from 'vue';
-
-// Definice TypeScript rozhraní pro odstranění chyb
-interface Option {
+<script lang="ts">
+export interface Option {
   id: string;
   text: string;
   isCorrect?: boolean;
 }
 
-interface Question {
+export interface Question {
   id: string;
   text: string;
   type: 'single' | 'multiple';
   options: Option[];
 }
 
-interface Quiz {
+export interface Quiz {
   title: string;
   questions: Question[];
   attempts?: number;
 }
+</script>
+
+<script setup lang="ts">
+import { ref, computed } from 'vue';
 
 const props = defineProps<{
   quiz: Quiz;
@@ -143,7 +144,6 @@ const score = computed(() => {
   props.quiz.questions.forEach((q) => {
     const userAns = answers.value[q.id] || [];
     
-    // Nyní TypeScript ví, že q.options je pole Option[]
     const correctIndices = q.options
       .map((opt, idx) => opt.isCorrect ? idx : -1)
       .filter((idx) => idx !== -1);
