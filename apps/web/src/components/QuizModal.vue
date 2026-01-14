@@ -6,7 +6,7 @@
       >
         <button
           @click="close"
-          class="absolute top-4 right-4 text-gray-400 hover:text-red-500 font-bold text-xl"
+          class="absolute top-4 right-4 text-gray-400 hover:text-red-500 font-bold text-6xl"
         >
           &times;
         </button>
@@ -38,7 +38,7 @@
               <button
                 type="button"
                 @click="removeQuestion(qIndex)"
-                class="absolute top-2 right-2 text-red-400 hover:text-red-600 font-bold"
+                class="absolute top-2 right-2 text-red-400 hover:text-red-600 font-bold text-xl"
                 title="Odstranit otázku"
               >
                 &times;
@@ -215,7 +215,7 @@ export interface Quiz {
   questions: QuizQuestion[];
 }
 
-const props = defineProps<{
+defineProps<{
   show: boolean;
 }>();
 

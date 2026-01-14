@@ -90,8 +90,28 @@
 <script setup lang="ts">
 import { ref, computed } from 'vue';
 
+export interface Option {
+  id: string;
+  text: string;
+  isCorrect?: boolean; // Optional because it might not be visible to the user immediately, but used in logic
+}
+
+export interface Question {
+  id: string;
+  text: string;
+  type: 'single' | 'multiple';
+  options: Option[];
+}
+
+export interface Quiz {
+  id: string;
+  title: string;
+  questions: Question[];
+  attempts?: number;
+}
+
 const props = defineProps<{
-  quiz: any; // Using any for flexibility with backend structure
+  quiz: Quiz; 
 }>();
 
 const emit = defineEmits(['close', 'cancel']);
@@ -124,15 +144,13 @@ const toggleAnswer = (qId: string, oIndex: number, type: 'single' | 'multiple') 
 
 const score = computed(() => {
   let points = 0;
-  props.quiz.questions.forEach((q: any) => {
+  props.quiz.questions.forEach((q) => {
     const userAns = answers.value[q.id] || [];
-    // Correct logic depends on backend structure. 
-    // Assuming 'options' have 'isCorrect' boolean from previous step.
     
     // Find indices of correct options
     const correctIndices = q.options
-      .map((opt: any, idx: number) => opt.isCorrect ? idx : -1)
-      .filter((idx: number) => idx !== -1);
+      .map((opt, idx) => opt.isCorrect ? idx : -1)
+      .filter((idx) => idx !== -1);
 
     // Exact match required
     if (

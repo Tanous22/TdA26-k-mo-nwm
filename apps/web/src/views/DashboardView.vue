@@ -92,23 +92,17 @@
       :show="showModal"
       :course="editingCourse"
       :categories="categories"
-      @close="showModal = false"
-      @save="saveCourse"
-    />
-
-    <!-- Modal -->
-    <CourseModal
-      :show="showModal"
-      :course="editingCourse"
-      :categories="categories"
-      @close="showModal = false"
+      @close="
+        showModal = false;
+        editingCourse = null;
+      "
       @save="saveCourse"
     />
 
     <!-- Delete Confirmation Modal -->
     <ConfirmationModal
       :show="showDeleteModal"
-      title="Chcete kurz zavřít?"
+      title="Chcete kurz smazat?"
       @cancel="showDeleteModal = false"
       @confirm="confirmDelete"
     />
@@ -212,7 +206,18 @@ const deleteCourse = async (uuid?: string) => {
 };
 
 const confirmDelete = async () => {
-  // "když ano tak to zatim neřeš" -> Intentionally do nothing but close modal
+  if (courseToDeleteId.value) {
+    try {
+      const response = await fetch(`/api/courses/${courseToDeleteId.value}`, {
+        method: "DELETE",
+      });
+      if (!response.ok) throw new Error("Failed to delete course");
+      await fetchCourses(); // Reload
+    } catch (err) {
+      alert(err instanceof Error ? err.message : "Chyba při mazání kurzu");
+      console.error("Error deleting course:", err);
+    }
+  }
   showDeleteModal.value = false;
   courseToDeleteId.value = null;
 };
