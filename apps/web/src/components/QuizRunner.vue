@@ -1,6 +1,5 @@
 <template>
   <div class="space-y-6">
-    <!-- Header -->
     <div class="text-center mb-8">
       <h3 class="text-2xl font-bold text-gray-900 mb-2">{{ quiz.title }}</h3>
       <p class="text-gray-500 text-sm">
@@ -8,7 +7,6 @@
       </p>
     </div>
 
-    <!-- Questions -->
     <div v-if="!submitted" class="space-y-8">
       <div
         v-for="(question, qIndex) in quiz.questions"
@@ -35,7 +33,6 @@
                 : 'bg-white border-gray-200 hover:border-gray-300 text-gray-700'
             ]"
           >
-            <!-- Checkbox/Radio circle -->
             <div
               class="w-6 h-6 rounded border-2 flex items-center justify-center flex-shrink-0 transition-colors"
               :class="[
@@ -67,7 +64,6 @@
       </div>
     </div>
 
-    <!-- Results -->
     <div v-else class="text-center animate-bounce-in">
       <div class="mb-8 p-8 bg-gradient-to-br from-green-400 to-green-600 rounded-2xl text-white shadow-lg organic-box !border-none">
         <div class="text-6xl mb-4">🎉</div>
@@ -145,14 +141,16 @@ const toggleAnswer = (qId: string, oIndex: number, type: 'single' | 'multiple') 
 const score = computed(() => {
   let points = 0;
   props.quiz.questions.forEach((q) => {
+  props.quiz.questions.forEach((q) => {
     const userAns = answers.value[q.id] || [];
     
-    // Find indices of correct options
+    // Nyní TypeScript ví, že q.options je pole Option[]
     const correctIndices = q.options
       .map((opt, idx) => opt.isCorrect ? idx : -1)
       .filter((idx) => idx !== -1);
+      .map((opt, idx) => opt.isCorrect ? idx : -1)
+      .filter((idx) => idx !== -1);
 
-    // Exact match required
     if (
       userAns.length === correctIndices.length &&
       userAns.every((idx) => correctIndices.includes(idx))
@@ -164,7 +162,6 @@ const score = computed(() => {
 });
 
 const submitQuiz = () => {
-  // Here you would typically send to API
   submitted.value = true;
 };
 </script>

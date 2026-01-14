@@ -20,6 +20,9 @@ apiRoutes.get("/", (_req, res) => {
   res.status(200).json({ organization: "Student Cyber Games" });
 });
 
+// Vše připojíme na root
+app.use("/", apiRoutes);
+
 // Připojení uživatelů
 apiRoutes.use("/users", userRoutes);
 
@@ -28,9 +31,6 @@ apiRoutes.use("/courses", coursesRouter);
 
 // Tady říkáme: Když URL začíná /courses/.../materials, předej to našemu routeru
 apiRoutes.use("/courses/:courseId/materials", materialsRouter);
-
-// Vše připojíme na root
-app.use("/", apiRoutes);
 
 const port = process.env.PORT || 3000;
 
