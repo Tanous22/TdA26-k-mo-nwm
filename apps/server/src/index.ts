@@ -5,7 +5,8 @@ import { initDatabase } from "./db/init.js";
 import { userRoutes } from "./routes/users.js";
 import { materialsRouter } from "./routes/materials.js";
 // Importujeme router pro kurzy (musí odpovídat exportu v courses.ts)
-import { coursesRouter } from "./routes/courses.js"; 
+import { coursesRouter } from "./routes/courses.js";
+import { quizzesRouter } from "./routes/quizzes.js";
 
 const app = express();
 
@@ -31,6 +32,9 @@ apiRoutes.use("/courses", coursesRouter);
 
 // Tady říkáme: Když URL začíná /courses/.../materials, předej to našemu routeru
 apiRoutes.use("/courses/:courseId/materials", materialsRouter);
+
+// Quizzes
+apiRoutes.use("/courses/:courseId/quizzes", quizzesRouter);
 
 const port = process.env.PORT || 3000;
 
