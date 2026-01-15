@@ -2,6 +2,8 @@ import express, { type Request, type Response, type NextFunction } from "express
 import multer from "multer";
 import { pool } from "../db/index.js";
 import { v4 as uuidv4 } from "uuid";
+// PŘIDÁNO: Import pro vysílání do feedu
+import { broadcastToCourse } from "./feed.js";
 
 const ALLOWED_MIME_TYPES = [
     "application/pdf",                                                      // .pdf
@@ -139,6 +141,31 @@ materialsRouter.post("/", handleUpload, async (req: Request, res: Response) => {
              VALUES (?, ?, ?, ?, ?, ?, ?)`,
             [newUuid, dbCourseId, type, name, description, content, mimeType]
         );
+
+        // --- PŘIDÁNO: AUTOMATICKÁ UDÁLOST DO FEEDU (FÁZE 4) ---
+        try {
+            const feedUuid = uuidv4();
+            const feedContent = `Nový studijní materiál: ${name}`;
+
+            // 1. Zápis do DB feedu
+            await pool.execute(
+                "INSERT INTO feed_events (uuid, course_id, type, content, author, created_at) VALUES (?, ?, ?, ?, ?, NOW())",
+                [feedUuid, dbCourseId, "system", feedContent, null]
+            );
+
+            // 2. Odeslání přes SSE
+            broadcastToCourse(courseId, {
+                uuid: feedUuid,
+                type: "system",
+                content: feedContent,
+                createdAt: new Date(),
+                isEdited: false
+            });
+        } catch (feedError) {
+            console.error("Nepodařilo se zapsat do feedu:", feedError);
+            // Nechceme shodit request, pokud selže jen feed
+        }
+        // --------------------------------------------------------
 
         res.status(201).json({
             uuid: newUuid,

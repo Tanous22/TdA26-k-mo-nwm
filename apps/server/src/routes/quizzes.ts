@@ -1,6 +1,8 @@
 import { Router, type Request, type Response } from "express";
 import { v4 as uuidv4 } from "uuid";
 import { pool } from "../db/index.js";
+// PŘIDÁNO: Import pro vysílání do feedu
+import { broadcastToCourse } from "./feed.js";
 
 export const quizzesRouter = Router({ mergeParams: true });
 
@@ -157,6 +159,30 @@ quizzesRouter.post("/", async (req: Request, res: Response) => {
         }
 
         console.log("[DEBUG-QUIZ] All questions inserted successfully.");
+
+        // --- PŘIDÁNO: AUTOMATICKÁ UDÁLOST DO FEEDU (FÁZE 4) ---
+        try {
+            const feedUuid = uuidv4();
+            const feedContent = `Nový kvíz: ${title}`;
+
+            // 1. Zápis do DB feedu
+            await pool.execute(
+                "INSERT INTO feed_events (uuid, course_id, type, content, author, created_at) VALUES (?, ?, ?, ?, ?, NOW())",
+                [feedUuid, dbCourseId, "system", feedContent, null]
+            );
+
+            // 2. Odeslání přes SSE
+            broadcastToCourse(courseId, {
+                uuid: feedUuid,
+                type: "system",
+                content: feedContent,
+                createdAt: new Date(),
+                isEdited: false
+            });
+        } catch (feedError) {
+            console.error("[DEBUG-QUIZ] Nepodařilo se zapsat do feedu:", feedError);
+        }
+        // --------------------------------------------------------
 
         res.status(201).json({
             uuid: quizUuid,
