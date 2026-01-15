@@ -100,10 +100,9 @@ import { useAuth } from '../composables/useAuth';
 
 const route = useRoute();
 const { user } = useAuth();
-// Robust ID extraction handling both :courseId and :uuid conventions
 const courseId = (route.params.courseId || route.params.uuid) as string;
 
-// Správná definice API
+// Správná definice API URL
 const apiUrl = import.meta.env.VITE_API_URL || '/api';
 
 const loading = ref(true);
@@ -121,11 +120,10 @@ const getMaterialIcon = (mat: any) => {
   return '📁';
 };
 
-// --- DATA FETCHING & MAPPING ---
 const fetchData = async () => {
   try {
     loading.value = true;
-    console.log(`[CourseDetail] Using Course ID: ${courseId}`);
+    console.log(`[CourseDetail] Using Course ID: ${courseId}`); 
     const response = await fetch(`${apiUrl}/courses/${courseId}`);
     if (!response.ok) throw new Error('Failed to fetch course');
     const data = await response.json();
@@ -162,7 +160,6 @@ const fetchData = async () => {
   }
 };
 
-// --- MATERIAL ACTIONS ---
 const handleAddLink = async () => {
   const url = prompt("Zadejte URL odkazu:");
   if (!url) return;
@@ -225,14 +222,12 @@ const deleteQuiz = async (quizUuid: string) => {
   await fetchData();
 };
 
-// --- OPRAVENÁ A NEPRŮSTŘELNÁ FUNKCE PRO UKLÁDÁNÍ ---
+// --- ODESÍLÁNÍ KVÍZU NA SERVER ---
 const handleQuizSave = async (quizData: any) => {
-  // 1. KONTROLA: Pokud se toto nezobrazí, nefunguje tlačítko v modalu
-  alert("Zahajuji ukládání kvízu... (Klikni OK)");
+  alert("🔔 PŘIJATO: CourseDetailView začíná zpracovávat data!");
 
   let payload;
   try {
-      // Bezpečný mapping s kontrolou chyb
       const backendQuestions = quizData.questions.map((q: any, i: number) => {
         let correctIndex = undefined;
         let correctIndices = undefined;
@@ -241,7 +236,7 @@ const handleQuizSave = async (quizData: any) => {
 
         if (q.type === 'single') {
            correctIndex = q.options.findIndex((opt: any) => opt.isCorrect);
-           if(correctIndex === -1) correctIndex = 0; // Fallback
+           if(correctIndex === -1) correctIndex = 0; 
         } else {
            correctIndices = q.options
              .map((opt: any, idx: number) => opt.isCorrect ? idx : -1)
@@ -262,17 +257,19 @@ const handleQuizSave = async (quizData: any) => {
         questions: backendQuestions
       };
   } catch (err: any) {
-      // 2. KONTROLA CHYB DAT: Toto vyskočí, pokud je problém v JavaScriptu
-      alert("CHYBA PŘI PŘÍPRAVĚ DAT:\n" + err.message);
+      alert("❌ CHYBA PŘI PŘÍPRAVĚ DAT: " + err.message);
       console.error(err);
       return; 
   }
 
+  // Sestavení URL pro POST request na backend
+  // Výsledkem je např.: /api/courses/123/quizzes
   const url = editingQuiz.value 
     ? `${apiUrl}/courses/${courseId}/quizzes/${editingQuiz.value.uuid}` 
     : `${apiUrl}/courses/${courseId}/quizzes`;
 
   console.log("Saving Quiz to:", url);
+  alert(`Odesílám POST na: ${url}`);
 
   try {
     const res = await fetch(url, {
@@ -288,11 +285,10 @@ const handleQuizSave = async (quizData: any) => {
     
     closeQuizModal();
     await fetchData(); 
-    alert("✅ Kvíz byl úspěšně uložen!");
+    alert("✅ HOTOVO: Kvíz byl úspěšně uložen!");
   } catch (e: any) {
-    // 3. KONTROLA SÍTĚ: Toto vyskočí, pokud selže spojení
     console.error("Quiz Save Failed:", e);
-    alert(`❌ Nepodařilo se odeslat data na server:\n${e.message}`);
+    alert(`❌ CHYBA PŘI ODESÍLÁNÍ (FETCH): ${e.message}`);
   }
 };
 

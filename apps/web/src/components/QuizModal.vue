@@ -15,12 +15,11 @@
           {{ editMode ? 'Upravit kvíz' : 'Vytvořit nový kvíz' }}
         </h2>
 
-        <form @submit.prevent="saveQuiz" class="space-y-6">
+        <div class="space-y-6">
           <div>
             <label class="block font-bold mb-1 text-sm">Název kvízu</label>
             <input
               v-model="quizData.title"
-              required
               type="text"
               class="organic-input w-full"
               placeholder="Např. Test z CSS Grid"
@@ -48,7 +47,6 @@
                 >
                 <input
                   v-model="question.text"
-                  required
                   type="text"
                   class="organic-input w-full !py-2"
                   placeholder="Znění otázky..."
@@ -136,7 +134,6 @@
 
                   <input
                     v-model="option.text"
-                    required
                     type="text"
                     class="organic-input flex-grow !py-1 !px-2 !text-sm"
                     :placeholder="'Možnost ' + (oIndex + 1)"
@@ -177,11 +174,11 @@
           </div>
 
           <div class="pt-4 border-t border-gray-100">
-            <button type="submit" class="organic-btn w-full text-lg py-3">
+            <button type="button" @click="saveQuiz" class="organic-btn w-full text-lg py-3">
               {{ editMode ? 'Uložit změny' : 'Vytvořit kvíz' }}
             </button>
           </div>
-        </form>
+        </div>
       </div>
     </div>
   </Teleport>
@@ -208,11 +205,10 @@ export interface Quiz {
   questions: QuizQuestion[];
 }
 
-// ZMĚNA: Přidány chybějící props
 const props = defineProps<{
   show: boolean;
   editMode?: boolean;
-  initialData?: any; // Používáme any pro zjednodušení mappingu, ideálně typ Quiz
+  initialData?: any; 
 }>();
 
 const emit = defineEmits<{
@@ -242,12 +238,10 @@ const resetForm = () => {
   ];
 };
 
-// ZMĚNA: Sledování otevření modalu pro načtení dat
 watch(() => props.show, (newVal) => {
   if (newVal) {
     errorMessage.value = null;
     if (props.editMode && props.initialData) {
-      // Načtení dat pro editaci (hluboká kopie)
       const data = JSON.parse(JSON.stringify(props.initialData));
       quizData.title = data.title;
       quizData.questions = data.questions.map((q: any) => ({
@@ -256,13 +250,11 @@ watch(() => props.show, (newVal) => {
         options: q.options.map((o: any) => ({ ...o, id: o.id || crypto.randomUUID() }))
       }));
     } else {
-      // Reset pro nový kvíz
       resetForm();
     }
   }
 });
 
-// Clear error when user makes changes
 watch(() => quizData, () => {
   if (errorMessage.value) errorMessage.value = null;
 }, { deep: true });
@@ -348,13 +340,25 @@ const validateQuiz = (): boolean => {
   return true;
 };
 
+// OPRAVA 3: Debug funkce, která nám řekne, že tlačítko funguje
 const saveQuiz = () => {
-  if (!validateQuiz()) return;
+  console.log("Kliknuto na tlačítko saveQuiz");
+  alert("🛑 DEBUG: Tlačítko v Modalu funguje! Pokud to vidíš, validace ještě nezačala."); 
+  
+  if (!validateQuiz()) {
+      alert("❌ VALIDACE SELHALA: " + errorMessage.value);
+      return;
+  }
+  
+  alert("✅ Vše OK, odesílám data do CourseDetailView...");
   emit("save", JSON.parse(JSON.stringify(quizData)));
   errorMessage.value = null;
 };
 </script>
 
 <style scoped>
-/* No extra styles needed */
+.organic-btn {
+  @apply font-bold rounded-lg shadow-sm transition-transform active:scale-95 border-2 border-transparent bg-[#91F5AD] text-[#1A1A1A] hover:bg-[#0070BB] hover:text-white;
+  border-radius: 255px 15px 225px 15px / 15px 225px 15px 255px;
+}
 </style>
