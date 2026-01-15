@@ -118,7 +118,7 @@ interface Course {
   materials?: any[];
 }
 
-// --- ZDE BYLA CHYBA: ZMĚNA NA '/api' ---
+// --- OPRAVA: ZMĚNA NA '/api' ---
 const apiUrl = import.meta.env.VITE_API_URL || '/api';
 
 const categories = ["Programování", "Design & Art", "Marketing", "Soft Skills"];
@@ -141,6 +141,7 @@ const fetchCourses = async () => {
   try {
     loading.value = true;
     error.value = "";
+    // ZMĚNA: Použití apiUrl místo /api
     const response = await fetch(`${apiUrl}/courses`);
     if (!response.ok) throw new Error("Failed to fetch courses");
     const data = await response.json();
@@ -168,29 +169,33 @@ const openModal = (course?: Course) => {
 
 const saveCourse = async (courseData: Course, isEditing: boolean) => {
   try {
-    if (isEditing && courseData.uuid) {
-      // Update
-      const response = await fetch(`${apiUrl}/courses/${courseData.uuid}`, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(courseData),
-      });
-      if (!response.ok) throw new Error("Failed to update course");
-    } else {
-      // Create
-      const response = await fetch(`${apiUrl}/courses`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(courseData),
-      });
-      if (!response.ok) throw new Error("Failed to create course");
+    const url = isEditing && courseData.uuid 
+      ? `${apiUrl}/courses/${courseData.uuid}` 
+      : `${apiUrl}/courses`;
+      
+    const method = isEditing && courseData.uuid ? "PUT" : "POST";
+
+    console.log(`Odesílám požadavek na: ${url} (${method})`); // DEBUG
+
+    const response = await fetch(url, {
+      method: method,
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(courseData),
+    });
+
+    if (!response.ok) {
+        // Přečteme text chyby ze serveru
+        const errorText = await response.text();
+        throw new Error(`Chyba ${response.status}: ${errorText || response.statusText}`);
     }
 
     showModal.value = false;
     editingCourse.value = null;
     await fetchCourses(); 
   } catch (err) {
-    alert(err instanceof Error ? err.message : "Chyba při ukládání kurzu");
+    // Vypíšeme celou chybu
+    const msg = err instanceof Error ? err.message : "Neznámá chyba";
+    alert(`Chyba při ukládání: ${msg}`);
     console.error("Error saving course:", err);
   }
 };
@@ -204,6 +209,7 @@ const deleteCourse = async (uuid?: string) => {
 const confirmDelete = async () => {
   if (courseToDeleteId.value) {
     try {
+      // ZMĚNA: Použití apiUrl
       const response = await fetch(`${apiUrl}/courses/${courseToDeleteId.value}`, {
         method: "DELETE",
       });

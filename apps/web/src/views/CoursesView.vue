@@ -81,7 +81,7 @@ interface Course {
   category?: string;
 }
 
-// --- ZDE BYLA CHYBA: ZMĚNA NA '/api' ---
+// --- OPRAVA: ZMĚNA NA '/api' ---
 const apiUrl = import.meta.env.VITE_API_URL || '/api';
 
 const searchQuery = ref("");
@@ -114,11 +114,13 @@ const fetchCourses = async () => {
     loading.value = true;
     error.value = "";
     
+    // ZMĚNA: Použití apiUrl proměnné
     const response = await fetch(`${apiUrl}/courses`);
     
     if (!response.ok) throw new Error("Failed to fetch courses");
     const data = await response.json();
 
+    // Přidáme defaultní hodnoty pro vizuální zobrazení
     courses.value = data.map((course: any, index: number) => ({
       uuid: course.uuid,
       name: course.name,
