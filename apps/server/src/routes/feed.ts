@@ -16,20 +16,23 @@ export const broadcastToCourse = (courseId: string, event: any) => {
   });
 };
 
-// Pomocná funkce: DB formát -> API formát
+// Pomocná funkce: DB formát -> API formát (přesně podle testů)
 const mapEvent = (row: any) => ({
   uuid: row.uuid,
-  type: row.type,
-  content: row.content,
+  // Pokud je v DB 'message', testy chtějí 'manual'. 'system' zůstává 'system'.
+  type: row.type === 'message' ? 'manual' : row.type, 
+  // Testy očekávají 'message', v DB máme 'content'
+  message: row.content, 
   author: row.author,
-  isEdited: !!row.is_edited,
+  // Testy očekávají 'edited', my v DB 'is_edited'
+  edited: !!row.is_edited, 
   createdAt: row.created_at,
+  updatedAt: row.updated_at
 });
 
 // 1. SSE Stream
 feedRouter.get('/stream', (req: Request, res: Response) => {
   const { courseId } = req.params;
-
   res.setHeader('Content-Type', 'text/event-stream');
   res.setHeader('Cache-Control', 'no-cache');
   res.setHeader('Connection', 'keep-alive');
@@ -43,7 +46,7 @@ feedRouter.get('/stream', (req: Request, res: Response) => {
   });
 });
 
-// 2. Načtení historie
+// 2. GET Feed
 feedRouter.get('/', async (req: Request, res: Response) => {
   const { courseId } = req.params;
   try {
@@ -54,7 +57,6 @@ feedRouter.get('/', async (req: Request, res: Response) => {
       'SELECT * FROM feed_events WHERE course_id = ? ORDER BY created_at DESC',
       [courseRows[0].id]
     );
-    
     res.json(rows.map(mapEvent));
   } catch (error) {
     console.error(error);
@@ -62,50 +64,47 @@ feedRouter.get('/', async (req: Request, res: Response) => {
   }
 });
 
-// 3. Manuální příspěvek (Lektor) - ZDE BYLA CHYBA
+// 3. POST (Manuální zpráva)
 feedRouter.post('/', async (req: Request, res: Response) => {
   const { courseId } = req.params;
-  // Testy posílají 'message', frontend může posílat 'content'. Musíme to sjednotit.
-  const { content, message, author, type } = req.body;
+  // Testy posílají 'message', frontend může 'content'. Bereme oboje.
+  const { content, message, author } = req.body;
   
-  // Ošetření undefined hodnot (MySQL nesnáší undefined, chce null)
-  const finalContent = content || message || ""; // Fallback
-  const finalAuthor = author || null;            // Fallback na null
+  const finalContent = content || message || "";
 
   try {
     const newUuid = uuidv4();
     const [courseRows]: any = await pool.execute('SELECT id FROM courses WHERE uuid = ?', [courseId]);
     if (courseRows.length === 0) return res.status(404).send('Course not found');
-    
     const courseIntId = courseRows[0].id;
 
+    // V DB je typ 'message' pro manuální zprávy
     await pool.execute(
-      'INSERT INTO feed_events (uuid, course_id, type, content, author, created_at) VALUES (?, ?, ?, ?, ?, NOW())',
-      [newUuid, courseIntId, type || 'message', finalContent, finalAuthor]
+      'INSERT INTO feed_events (uuid, course_id, type, content, author, created_at, updated_at) VALUES (?, ?, ?, ?, ?, NOW(), NOW())',
+      [newUuid, courseIntId, 'message', finalContent, author || null]
     );
 
-    // Načteme zpět
     const [rows]: any = await pool.execute('SELECT * FROM feed_events WHERE uuid = ?', [newUuid]);
     const newEvent = mapEvent(rows[0]);
 
     broadcastToCourse(courseId, newEvent);
     res.status(201).json(newEvent);
   } catch (error) {
-    console.error("Feed Error:", error);
+    console.error(error);
     res.status(500).json({ error: 'Failed to post message' });
   }
 });
 
-// 4. Úprava příspěvku (PUT)
+// 4. PUT (Úprava)
 feedRouter.put('/:eventId', async (req: Request, res: Response) => {
   const { courseId, eventId } = req.params;
   const { content, message } = req.body;
-  
-  const finalContent = content || message; // Zase podpora obou variant
+  const finalContent = content || message;
 
   try {
+    // Nastavíme updated_at explicitně
     const [result]: any = await pool.execute(
-      'UPDATE feed_events SET content = ?, is_edited = TRUE WHERE uuid = ?',
+      'UPDATE feed_events SET content = ?, is_edited = TRUE, updated_at = NOW() WHERE uuid = ?',
       [finalContent, eventId]
     );
 
@@ -122,16 +121,15 @@ feedRouter.put('/:eventId', async (req: Request, res: Response) => {
   }
 });
 
-// 5. Smazání příspěvku (DELETE)
+// 5. DELETE
 feedRouter.delete('/:eventId', async (req: Request, res: Response) => {
   const { courseId, eventId } = req.params;
-
   try {
     const [result]: any = await pool.execute('DELETE FROM feed_events WHERE uuid = ?', [eventId]);
     if (result.affectedRows === 0) return res.status(404).json({ error: 'Post not found' });
 
+    // Při smazání stačí poslat UUID
     broadcastToCourse(courseId, { uuid: eventId, type: 'delete' });
-    
     res.json({ success: true });
   } catch (error) {
     console.error(error);

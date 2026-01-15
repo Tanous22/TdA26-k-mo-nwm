@@ -58,16 +58,9 @@ coursesRouter.get("/", async (req: Request, res: Response) => {
                 `SELECT * FROM quizzes WHERE course_id = ?`,
                 [row.id]
             );
-            // We just need the quiz objects for the dashboard count/list. 
-            // Full question parsing might be heavy but let's at least give the correctly typed objects.
             const quizzes = (quizRows as any[]).map(q => ({
                 uuid: q.uuid,
                 title: q.title,
-                // We could fetch questions here if needed, but for dashboard lists, usually the existence/count is enough.
-                // If the frontend relies on questions.length for some reason, we might need more, 
-                // but usually dashboard just shows "3 Quizzes".
-                // Let's keep questions empty to match the minimal "list" requirement, 
-                // but crucial is that 'quizzes' array has the right length.
                 questions: []
             }));
 
@@ -152,6 +145,25 @@ coursesRouter.get("/:courseId", async (req: Request, res: Response) => {
             quizzes.push({ uuid: qRow.uuid, title: qRow.title, attemptsCount: qRow.attemptsCount || 0, questions });
         }
 
+// --- NOVÉ: Načtení Feedu pro detail kurzu ---
+        const [feedRows] = await pool.execute(
+            "SELECT * FROM feed_events WHERE course_id = ? ORDER BY created_at DESC", 
+            [courseData.id] // POZOR: Tvůj kód používá courseData.id
+        );
+        
+        // Mapování feedu
+        const feed = (feedRows as any[]).map(row => ({
+            uuid: row.uuid,
+            type: row.type === 'message' ? 'manual' : row.type,
+            message: row.content, 
+            author: row.author,
+            edited: !!row.is_edited,
+            createdAt: row.created_at,
+            updatedAt: row.updated_at
+        }));
+        // -------------------------------------------
+
+
         res.status(200).json({
             uuid: courseData.uuid,
             name: courseData.name,
@@ -159,7 +171,7 @@ coursesRouter.get("/:courseId", async (req: Request, res: Response) => {
             difficulty: courseData.difficulty || "",
             materials,
             quizzes,
-            feed: []
+            feed: feed
         });
     } catch (error) {
         console.error("Error fetching course detail:", error);

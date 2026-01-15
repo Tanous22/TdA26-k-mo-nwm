@@ -158,7 +158,7 @@ materialsRouter.post("/", handleUpload, async (req: Request, res: Response) => {
             broadcastToCourse(courseId, {
                 uuid: feedUuid,
                 type: "system",
-                content: feedContent,
+                message: feedContent,
                 createdAt: new Date(),
                 isEdited: false
             });

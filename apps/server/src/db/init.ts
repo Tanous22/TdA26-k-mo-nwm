@@ -88,8 +88,7 @@ export async function initDatabase() {
       )
     `);
 
-    // 7. Tabulka FEED_EVENTS (Live Feed - FÁZE 4)
-    // ZDE JSEM PŘIDAL SLOUPEC is_edited
+    // 7. Tabulka FEED_EVENTS (Opraveno: přidán updated_at a is_edited)
     await pool.execute(`
       CREATE TABLE IF NOT EXISTS feed_events (
         id INT AUTO_INCREMENT PRIMARY KEY,
@@ -98,8 +97,9 @@ export async function initDatabase() {
         type ENUM('message', 'system') NOT NULL,
         content TEXT NOT NULL,
         author VARCHAR(255),
-        is_edited BOOLEAN DEFAULT FALSE, 
+        is_edited BOOLEAN DEFAULT FALSE,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
         FOREIGN KEY (course_id) REFERENCES courses(id) ON DELETE CASCADE
       )
     `);
