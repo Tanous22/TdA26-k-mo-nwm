@@ -340,9 +340,9 @@ const validateQuiz = (): boolean => {
   return true;
 };
 
-// OPRAVA 3: Debug funkce, která nám řekne, že tlačítko funguje
 const saveQuiz = () => {
   console.log("Kliknuto na tlačítko saveQuiz");
+  // DEBUG ALERT
   alert("🛑 DEBUG: Tlačítko v Modalu funguje! Pokud to vidíš, validace ještě nezačala."); 
   
   if (!validateQuiz()) {

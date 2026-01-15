@@ -102,7 +102,7 @@ const route = useRoute();
 const { user } = useAuth();
 const courseId = (route.params.courseId || route.params.uuid) as string;
 
-// Správná definice API URL
+// 1. ZÁKLADNÍ NASTAVENÍ API
 const apiUrl = import.meta.env.VITE_API_URL || '/api';
 
 const loading = ref(true);
@@ -120,6 +120,7 @@ const getMaterialIcon = (mat: any) => {
   return '📁';
 };
 
+// 2. NAČÍTÁNÍ DAT
 const fetchData = async () => {
   try {
     loading.value = true;
@@ -160,6 +161,7 @@ const fetchData = async () => {
   }
 };
 
+// 3. POMOCNÉ FUNKCE (PRO ODSTRANĚNÍ ERRORŮ)
 const handleAddLink = async () => {
   const url = prompt("Zadejte URL odkazu:");
   if (!url) return;
@@ -222,8 +224,9 @@ const deleteQuiz = async (quizUuid: string) => {
   await fetchData();
 };
 
-// --- ODESÍLÁNÍ KVÍZU NA SERVER ---
+// 4. HLAVNÍ FUNKCE PRO ULOŽENÍ KVÍZU (S DEBUGEM)
 const handleQuizSave = async (quizData: any) => {
+  // DEBUG ALERT - Potvrzení přijetí dat
   alert("🔔 PŘIJATO: CourseDetailView začíná zpracovávat data!");
 
   let payload;
@@ -262,13 +265,12 @@ const handleQuizSave = async (quizData: any) => {
       return; 
   }
 
-  // Sestavení URL pro POST request na backend
-  // Výsledkem je např.: /api/courses/123/quizzes
   const url = editingQuiz.value 
     ? `${apiUrl}/courses/${courseId}/quizzes/${editingQuiz.value.uuid}` 
     : `${apiUrl}/courses/${courseId}/quizzes`;
 
   console.log("Saving Quiz to:", url);
+  // DEBUG ALERT - Kontrola URL
   alert(`Odesílám POST na: ${url}`);
 
   try {
