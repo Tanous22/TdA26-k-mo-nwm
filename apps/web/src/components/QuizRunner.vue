@@ -147,6 +147,9 @@ const score = computed(() => {
   return result.value?.score ?? 0;
 });
 
+// Safe API URL resolution
+const apiUrl = import.meta.env.VITE_API_URL || '/api';
+
 const submitQuiz = async () => {
   try {
     const payload = {
@@ -168,7 +171,9 @@ const submitQuiz = async () => {
       }).filter(a => a !== null)
     };
 
-    const response = await fetch(`${import.meta.env.VITE_API_URL}/courses/${props.courseId}/quizzes/${props.quiz.uuid || props.quiz.id}/submit`, {
+    console.log(`[QuizRunner] Submitting to ${apiUrl}`);
+
+    const response = await fetch(`${apiUrl}/courses/${props.courseId}/quizzes/${props.quiz.uuid || props.quiz.id}/submit`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json'
@@ -187,9 +192,9 @@ const submitQuiz = async () => {
     };
     submitted.value = true;
 
-  } catch (e) {
+  } catch (e: any) {
       console.error("Error submitting quiz:", e);
-      alert("Chyba při odesílání kvízu.");
+      alert(`Chyba při odesílání kvízu: ${e.message || e}`);
   }
 };
 </script>

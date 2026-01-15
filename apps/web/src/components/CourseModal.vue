@@ -277,7 +277,7 @@ const formData = reactive<Course>({
   materials: [],
 });
 
-// Define resetForm BEFORE watch so it can be called
+// Define resetForm
 const resetForm = () => {
   isEditing.value = false;
   formData.uuid = undefined;
@@ -293,24 +293,37 @@ const resetForm = () => {
   showQuizModal.value = false;
 };
 
-// Now watch can safely call resetForm
-watch(
-  () => props.course,
-  (newCourse) => {
-    if (newCourse) {
+const initForm = () => {
+  if (props.course) {
       isEditing.value = true;
-      formData.uuid = newCourse.uuid;
-      formData.name = newCourse.name;
-      formData.description = newCourse.description;
-      formData.category = newCourse.category || "Programování";
-      formData.difficulty = newCourse.difficulty || "Začátečník";
-      formData.materials = [...(newCourse.materials || [])];
-    } else {
+      formData.uuid = props.course.uuid;
+      formData.name = props.course.name;
+      formData.description = props.course.description;
+      formData.category = props.course.category || "Programování";
+      formData.difficulty = props.course.difficulty || "Začátečník";
+      formData.materials = [...(props.course.materials || [])];
+  } else {
       resetForm();
+  }
+};
+
+// Watch 'show' to initialize form every time modal opens
+watch(
+  () => props.show,
+  (isOpen) => {
+    if (isOpen) {
+      initForm();
     }
   },
   { immediate: true }
 );
+
+// Watch props.course just in case it changes while open (edge case, but safe)
+watch(() => props.course, () => {
+    if (props.show) {
+       initForm();
+    }
+});
 
 const handleFileUpload = (event: Event) => {
   const target = event.target as HTMLInputElement;
@@ -366,7 +379,7 @@ const removeMaterial = (index: number) => {
 
 const saveCourse = () => {
   emit("save", { ...formData }, isEditing.value);
-  resetForm();
+  // Do NOT resetForm here. Wait for parent to close modal (which triggers watch->initForm/reset)
 };
 
 const close = () => {
