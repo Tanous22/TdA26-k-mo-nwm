@@ -102,7 +102,9 @@ const route = useRoute();
 const { user } = useAuth();
 // Robust ID extraction handling both :courseId and :uuid conventions
 const courseId = (route.params.courseId || route.params.uuid) as string;
-const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:3000';
+
+// --- ZDE BYLA CHYBA: ZMĚNA NA '/api' ---
+const apiUrl = import.meta.env.VITE_API_URL || '/api';
 
 const loading = ref(true);
 const activeQuiz = ref<Quiz | null>(null);

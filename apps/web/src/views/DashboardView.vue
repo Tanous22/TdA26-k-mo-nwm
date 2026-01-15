@@ -118,8 +118,8 @@ interface Course {
   materials?: any[];
 }
 
-// ZMĚNA: Definice API URL (tohle tu chybělo)
-const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:3000';
+// --- ZDE BYLA CHYBA: ZMĚNA NA '/api' ---
+const apiUrl = import.meta.env.VITE_API_URL || '/api';
 
 const categories = ["Programování", "Design & Art", "Marketing", "Soft Skills"];
 const courses = ref<Course[]>([]);
@@ -141,7 +141,6 @@ const fetchCourses = async () => {
   try {
     loading.value = true;
     error.value = "";
-    // ZMĚNA: Použití apiUrl místo /api
     const response = await fetch(`${apiUrl}/courses`);
     if (!response.ok) throw new Error("Failed to fetch courses");
     const data = await response.json();
@@ -171,7 +170,6 @@ const saveCourse = async (courseData: Course, isEditing: boolean) => {
   try {
     if (isEditing && courseData.uuid) {
       // Update
-      // ZMĚNA: Použití apiUrl
       const response = await fetch(`${apiUrl}/courses/${courseData.uuid}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
@@ -180,7 +178,6 @@ const saveCourse = async (courseData: Course, isEditing: boolean) => {
       if (!response.ok) throw new Error("Failed to update course");
     } else {
       // Create
-      // ZMĚNA: Použití apiUrl
       const response = await fetch(`${apiUrl}/courses`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -207,7 +204,6 @@ const deleteCourse = async (uuid?: string) => {
 const confirmDelete = async () => {
   if (courseToDeleteId.value) {
     try {
-      // ZMĚNA: Použití apiUrl
       const response = await fetch(`${apiUrl}/courses/${courseToDeleteId.value}`, {
         method: "DELETE",
       });
