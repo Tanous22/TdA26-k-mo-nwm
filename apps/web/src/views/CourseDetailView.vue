@@ -103,7 +103,7 @@ const { user } = useAuth();
 // Robust ID extraction handling both :courseId and :uuid conventions
 const courseId = (route.params.courseId || route.params.uuid) as string;
 
-// --- ZDE JE OPRAVA PRO API URL ---
+// Správná definice API
 const apiUrl = import.meta.env.VITE_API_URL || '/api';
 
 const loading = ref(true);
@@ -125,35 +125,29 @@ const getMaterialIcon = (mat: any) => {
 const fetchData = async () => {
   try {
     loading.value = true;
-    console.log(`[CourseDetail] Using Course ID: ${courseId}`); // Debug log
+    console.log(`[CourseDetail] Using Course ID: ${courseId}`);
     const response = await fetch(`${apiUrl}/courses/${courseId}`);
     if (!response.ok) throw new Error('Failed to fetch course');
     const data = await response.json();
-    console.log("Fetched data:", data);
     
     course.value = {
       ...data,
-      difficulty: data.difficulty || 'Začátečník', // Fallback
-
-      // Mapování materiálů (DB 'url' -> UI 'link')
+      difficulty: data.difficulty || 'Začátečník', 
       materials: (data.materials || []).map((m: any) => ({
         ...m,
         type: m.type === 'url' ? 'link' : m.type, 
         url: m.url || m.fileUrl
       })),
-      // Mapování kvízů (DB -> UI)
       quizzes: (data.quizzes || []).map((q: any) => ({
         ...q,
         attemptsCount: q.attemptsCount || 0,
         questions: (q.questions || []).map((kq: any) => ({
-          id: kq.uuid, // Frontend používá 'id', backend 'uuid'
-          text: kq.question, // Frontend 'text' <-> Backend 'question'
-          // Frontend čeká 'single'/'multiple', DB má 'singleChoice'/'multipleChoice'
+          id: kq.uuid,
+          text: kq.question,
           type: kq.type === 'singleChoice' ? 'single' : 'multiple',
           options: (kq.options || []).map((optText: string, idx: number) => ({
              id: `opt-${idx}`,
              text: optText,
-             // Rekonstrukce isCorrect pro zobrazení
              isCorrect: kq.type === 'singleChoice' 
                 ? kq.correctIndex === idx 
                 : (kq.correctIndices || []).includes(idx)
@@ -231,32 +225,30 @@ const deleteQuiz = async (quizUuid: string) => {
   await fetchData();
 };
 
-// --- DEBUG VERZE FUNKCE HANDLE QUIZ SAVE ---
+// --- OPRAVENÁ A NEPRŮSTŘELNÁ FUNKCE PRO UKLÁDÁNÍ ---
 const handleQuizSave = async (quizData: any) => {
-  // 1. DEBUG: Zkontrolujeme, že funkce vůbec začala
-  console.log("Spouštím ukládání kvízu...", quizData);
+  // 1. KONTROLA: Pokud se toto nezobrazí, nefunguje tlačítko v modalu
+  alert("Zahajuji ukládání kvízu... (Klikni OK)");
 
   let payload;
   try {
-      // Transformace dat: Frontend (single/multiple) -> Backend (singleChoice/multipleChoice)
-      const backendQuestions = quizData.questions.map((q: any) => {
+      // Bezpečný mapping s kontrolou chyb
+      const backendQuestions = quizData.questions.map((q: any, i: number) => {
         let correctIndex = undefined;
         let correctIndices = undefined;
 
+        if (!q.options) throw new Error(`Otázka č. ${i+1} nemá definované možnosti!`);
+
         if (q.type === 'single') {
-           // Kontrola, zda existuje options
-           if (!q.options) throw new Error("Chybí možnosti u otázky: " + q.text);
            correctIndex = q.options.findIndex((opt: any) => opt.isCorrect);
-           if(correctIndex === -1) correctIndex = 0;
+           if(correctIndex === -1) correctIndex = 0; // Fallback
         } else {
-           if (!q.options) throw new Error("Chybí možnosti u otázky: " + q.text);
            correctIndices = q.options
              .map((opt: any, idx: number) => opt.isCorrect ? idx : -1)
              .filter((idx: number) => idx !== -1);
         }
 
         return {
-          // Explicit mapping for Backend Enum requirements
           type: q.type === 'single' ? 'singleChoice' : 'multipleChoice',
           question: q.text,
           options: q.options.map((opt: any) => opt.text),
@@ -270,18 +262,17 @@ const handleQuizSave = async (quizData: any) => {
         questions: backendQuestions
       };
   } catch (err: any) {
-      alert("CHYBA V JAVASCRIPTU PŘED ODESLÁNÍM:\n" + err.message);
+      // 2. KONTROLA CHYB DAT: Toto vyskočí, pokud je problém v JavaScriptu
+      alert("CHYBA PŘI PŘÍPRAVĚ DAT:\n" + err.message);
       console.error(err);
-      return; // Nepokračujeme dál
+      return; 
   }
 
   const url = editingQuiz.value 
     ? `${apiUrl}/courses/${courseId}/quizzes/${editingQuiz.value.uuid}` 
     : `${apiUrl}/courses/${courseId}/quizzes`;
 
-  // 2. DEBUG: Ukážeme, kam se to chystáme poslat
   console.log("Saving Quiz to:", url);
-  console.log("Payload:", JSON.stringify(payload, null, 2));
 
   try {
     const res = await fetch(url, {
@@ -292,16 +283,16 @@ const handleQuizSave = async (quizData: any) => {
 
     if (!res.ok) {
         const errorText = await res.text();
-        throw new Error(`Server error: ${res.status} ${res.statusText} - ${errorText}`);
+        throw new Error(`Server vrátil chybu ${res.status}: ${errorText}`);
     }
     
     closeQuizModal();
     await fetchData(); 
-    alert("Kvíz byl úspěšně uložen.");
+    alert("✅ Kvíz byl úspěšně uložen!");
   } catch (e: any) {
+    // 3. KONTROLA SÍTĚ: Toto vyskočí, pokud selže spojení
     console.error("Quiz Save Failed:", e);
-    // 3. DEBUG: Toto se ukáže, pokud selže síť nebo server vrátí chybu
-    alert(`Nepodařilo se uložit kvíz (Fetch Error):\n${e.message}`);
+    alert(`❌ Nepodařilo se odeslat data na server:\n${e.message}`);
   }
 };
 
