@@ -169,35 +169,124 @@ const openModal = (course?: Course) => {
 
 const saveCourse = async (courseData: Course, isEditing: boolean) => {
   try {
+    // 1. EXTRAKCE KVÍZŮ
+    // Najdeme materiály, které jsou typu 'quiz'
+    const newQuizzes: any[] = [];
+    const cleanMaterials = (courseData.materials || []).filter((mat: any) => {
+      // Pokud je to kvíz a má data (je to nově vytvořený kvíz v modalu)
+      if (typeof mat === 'object' && mat.type === 'quiz' && mat.data) {
+        newQuizzes.push(mat.data);
+        return false; // Odebrat z materiálů pro uložení kurzu
+      }
+      return true; // Ponechat ostatní (url, file)
+    });
+
+    // Vytvoříme kopii dat kurzu bez kvízů v materials
+    const payloadCourse = {
+      ...courseData,
+      materials: cleanMaterials
+    };
+
+    // 2. ULOŽENÍ KURZU (SCENÁŘ A i B)
     const url = isEditing && courseData.uuid 
       ? `${apiUrl}/courses/${courseData.uuid}` 
       : `${apiUrl}/courses`;
       
     const method = isEditing && courseData.uuid ? "PUT" : "POST";
 
-    console.log(`Odesílám požadavek na: ${url} (${method})`); // DEBUG
+    console.log(`[Dashboard] Odesílám kurz na: ${url} (${method})`); 
 
     const response = await fetch(url, {
       method: method,
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(courseData),
+      body: JSON.stringify(payloadCourse), // Posíláme bez nových kvízů
     });
 
     if (!response.ok) {
-        // Přečteme text chyby ze serveru
         const errorText = await response.text();
         throw new Error(`Chyba ${response.status}: ${errorText || response.statusText}`);
+    }
+
+    const savedCourse = await response.json();
+    // Pokud jsme vytvářeli nový kurz, UUID je v odpovědi. Pokud jsme editovali, použijeme existující.
+    const finalCourseId = isEditing && courseData.uuid ? courseData.uuid : savedCourse.uuid;
+
+    if (!finalCourseId) {
+       console.warn("Nepodařilo se získat ID kurzu, kvízy nebudou uloženy.");
+    } else if (newQuizzes.length > 0) {
+       // 3. ULOŽENÍ KVÍZŮ (pokud nějaké jsou)
+       console.log(`[Dashboard] Zjištěno ${newQuizzes.length} nových kvízů k uložení pro kurz ${finalCourseId}`);
+       
+       for (const quiz of newQuizzes) {
+          await saveQuizSeparately(finalCourseId, quiz);
+       }
     }
 
     showModal.value = false;
     editingCourse.value = null;
     await fetchCourses(); 
+    alert(isEditing ? "Kurz byl upraven." : "Nový kurz byl vytvořen.");
+
   } catch (err) {
-    // Vypíšeme celou chybu
     const msg = err instanceof Error ? err.message : "Neznámá chyba";
     alert(`Chyba při ukládání: ${msg}`);
-    console.error("Error saving course:", err);
+    console.error("Error saving course sequence:", err);
   }
+};
+
+// Pomocná funkce pro uložení jednoho kvízu
+const saveQuizSeparately = async (courseId: string, quizData: any) => {
+    try {
+        // Transformace dat kvízu (Frontend formát -> Backend formát)
+        const backendQuestions = quizData.questions.map((q: any, i: number) => {
+            let correctIndex = undefined;
+            let correctIndices = undefined;
+
+            if (!q.options) throw new Error(`Otázka č. ${i+1} nemá možnosti.`);
+
+            if (q.type === 'single') {
+               // Frontend: 'single', Backend: 'singleChoice'
+               correctIndex = q.options.findIndex((opt: any) => opt.isCorrect);
+               if (correctIndex === -1) correctIndex = 0; 
+            } else {
+               // Frontend: 'multiple', Backend: 'multipleChoice'
+               correctIndices = q.options
+                 .map((opt: any, idx: number) => opt.isCorrect ? idx : -1)
+                 .filter((idx: number) => idx !== -1);
+            }
+
+            return {
+              type: q.type === 'single' ? 'singleChoice' : 'multipleChoice',
+              question: q.text,
+              options: q.options.map((opt: any) => opt.text),
+              correctIndex,
+              correctIndices
+            };
+        });
+
+        const payload = {
+            title: quizData.title,
+            questions: backendQuestions
+        };
+        
+        const quizUrl = `${apiUrl}/courses/${courseId}/quizzes`;
+        console.log(`[Dashboard] Ukládám kvíz '${quizData.title}' na ${quizUrl}`);
+        
+        const res = await fetch(quizUrl, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+        });
+
+        if (!res.ok) {
+           const txt = await res.text();
+           throw new Error(`Selhalo uložení kvízu: ${txt}`);
+        }
+    } catch (e: any) {
+        console.error(`Chyba při ukládání kvízu '${quizData.title}':`, e);
+        // Můžeme vyhodit chybu dál, nebo jen zalogovat a pokračovat
+        throw e; 
+    }
 };
 
 const deleteCourse = async (uuid?: string) => {
