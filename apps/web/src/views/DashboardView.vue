@@ -169,16 +169,24 @@ const openModal = (course?: Course) => {
 
 const saveCourse = async (courseData: Course, isEditing: boolean) => {
   try {
-    // 1. EXTRAKCE KVÍZŮ
-    // Najdeme materiály, které jsou typu 'quiz'
-    const newQuizzes: any[] = [];
+    // 1. EXTRAKCE VŠECH KVÍZŮ (i nových, i existujících)
+    // Protože CourseModal nyní míchá kvízy do materiálů, musíme je všechny vytáhnout
+    const quizzesToSave: any[] = [];
+    
+    // Filtrování materiálů - ponecháme jen ty, co NEJSOU kvíz
     const cleanMaterials = (courseData.materials || []).filter((mat: any) => {
-      // Pokud je to kvíz a má data (je to nově vytvořený kvíz v modalu)
-      if (typeof mat === 'object' && mat.type === 'quiz' && mat.data) {
-        newQuizzes.push(mat.data);
-        return false; // Odebrat z materiálů pro uložení kurzu
+      // Pokud je to kvíz
+      if (typeof mat === 'object' && mat.type === 'quiz') {
+        // Pokud má 'data', je to validní kvíz z modalu.
+        if (mat.data) {
+           quizzesToSave.push({
+               ...mat.data,
+               uuid: mat.uuid || mat.data.uuid // Ensure UUID is carried over if existing
+           });
+        }
+        return false; // Skrýt před uložením kurzu
       }
-      return true; // Ponechat ostatní (url, file)
+      return true; // Klasický materiál
     });
 
     // Vytvoříme kopii dat kurzu bez kvízů v materials
@@ -199,7 +207,7 @@ const saveCourse = async (courseData: Course, isEditing: boolean) => {
     const response = await fetch(url, {
       method: method,
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payloadCourse), // Posíláme bez nových kvízů
+      body: JSON.stringify(payloadCourse),
     });
 
     if (!response.ok) {
@@ -208,16 +216,15 @@ const saveCourse = async (courseData: Course, isEditing: boolean) => {
     }
 
     const savedCourse = await response.json();
-    // Pokud jsme vytvářeli nový kurz, UUID je v odpovědi. Pokud jsme editovali, použijeme existující.
     const finalCourseId = isEditing && courseData.uuid ? courseData.uuid : savedCourse.uuid;
 
     if (!finalCourseId) {
        console.warn("Nepodařilo se získat ID kurzu, kvízy nebudou uloženy.");
-    } else if (newQuizzes.length > 0) {
-       // 3. ULOŽENÍ KVÍZŮ (pokud nějaké jsou)
-       console.log(`[Dashboard] Zjištěno ${newQuizzes.length} nových kvízů k uložení pro kurz ${finalCourseId}`);
+    } else if (quizzesToSave.length > 0) {
+       // 3. ULOŽENÍ/AKTUALIZACE KVÍZŮ
+       console.log(`[Dashboard] Zpracovávám ${quizzesToSave.length} kvízů pro kurz ${finalCourseId}`);
        
-       for (const quiz of newQuizzes) {
+       for (const quiz of quizzesToSave) {
           await saveQuizSeparately(finalCourseId, quiz);
        }
     }
@@ -225,7 +232,7 @@ const saveCourse = async (courseData: Course, isEditing: boolean) => {
     showModal.value = false;
     editingCourse.value = null;
     await fetchCourses(); 
-    alert(isEditing ? "Kurz byl upraven." : "Nový kurz byl vytvořen.");
+    alert(isEditing ? "Kurz a kvízy byly uloženy." : "Nový kurz a kvízy byly vytvořeny.");
 
   } catch (err) {
     const msg = err instanceof Error ? err.message : "Neznámá chyba";
@@ -269,11 +276,21 @@ const saveQuizSeparately = async (courseId: string, quizData: any) => {
             questions: backendQuestions
         };
         
-        const quizUrl = `${apiUrl}/courses/${courseId}/quizzes`;
-        console.log(`[Dashboard] Ukládám kvíz '${quizData.title}' na ${quizUrl}`);
+        let quizUrl, method;
+        if (quizData.uuid) {
+            // Edit existing quiz
+            quizUrl = `${apiUrl}/courses/${courseId}/quizzes/${quizData.uuid}`;
+            method = 'PUT';
+        } else {
+            // Create new quiz
+            quizUrl = `${apiUrl}/courses/${courseId}/quizzes`;
+            method = 'POST';
+        }
+
+        console.log(`[Dashboard] ${method} kvíz '${quizData.title}' na ${quizUrl}`);
         
         const res = await fetch(quizUrl, {
-            method: 'POST',
+            method: method,
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(payload)
         });

@@ -71,145 +71,88 @@
             >
 
             <!-- Type Selector -->
+            <!-- Type Selector for Materials -->
             <div class="flex gap-4 mb-6 text-sm font-bold justify-center">
-              <button
-                type="button"
-                @click="materialType = 'url'"
+              <button type="button" @click="materialType = 'url'" 
                 class="flex items-center gap-2 px-3 py-2 rounded-lg transition-transform hover:scale-105"
-                :class="{
-                  'bg-[#E6F4FF] text-[#0070BB] border border-[#0070BB]': materialType === 'url',
-                  'bg-gray-50 text-gray-500 border border-transparent': materialType !== 'url',
-                }"
-              >
-                <img src="@/assets/icons/link.svg" class="w-5 h-5" alt="Link" />
-                Odkaz
+                :class="{'bg-[#E6F4FF] text-[#0070BB] border border-[#0070BB]': materialType === 'url', 'bg-gray-50 text-gray-500 border border-transparent': materialType !== 'url'}">
+                <img src="@/assets/icons/link.svg" class="w-5 h-5" alt="Link" /> Odkaz
               </button>
-              <button
-                type="button"
-                @click="materialType = 'file'"
+              <button type="button" @click="materialType = 'file'"
                 class="flex items-center gap-2 px-3 py-2 rounded-lg transition-transform hover:scale-105"
-                :class="{
-                  'bg-[#E6F4FF] text-[#0070BB] border border-[#0070BB]': materialType === 'file',
-                  'bg-gray-50 text-gray-500 border border-transparent': materialType !== 'file',
-                }"
-              >
-                <img src="@/assets/icons/file.svg" class="w-5 h-5" alt="File" />
-                Soubor
+                :class="{'bg-[#E6F4FF] text-[#0070BB] border border-[#0070BB]': materialType === 'file', 'bg-gray-50 text-gray-500 border border-transparent': materialType !== 'file'}">
+                <img src="@/assets/icons/file.svg" class="w-5 h-5" alt="File" /> Soubor
               </button>
-              <button
-                type="button"
-                @click="materialType = 'quiz'; openQuizModal()"
+              <button type="button" @click="materialType = 'quiz'"
                 class="flex items-center gap-2 px-3 py-2 rounded-lg transition-transform hover:scale-105"
-                :class="{
-                  'bg-[#FFF5D1] text-[#B8860B] border border-[#FFD93D]': materialType === 'quiz',
-                  'bg-gray-50 text-gray-500 border border-transparent': materialType !== 'quiz',
-                }"
-              >
-                <img src="@/assets/icons/quiz.svg" class="w-6 h-6" alt="Quiz" />
-                Kvíz
+                :class="{'bg-[#FFF5D1] text-[#B8860B] border border-[#FFD93D]': materialType === 'quiz', 'bg-gray-50 text-gray-500 border border-transparent': materialType !== 'quiz'}">
+                <img src="@/assets/icons/quiz.svg" class="w-6 h-6" alt="Quiz" /> Kvízy
               </button>
             </div>
 
-            <!-- Seznam existujících materiálů -->
-            <ul
-              v-if="formData.materials && formData.materials.length > 0"
-              class="space-y-2 mb-3"
-            >
-              <li
-                v-for="(mat, index) in formData.materials"
-                :key="index"
-                class="flex items-center justify-between bg-gray-50 p-2 rounded border border-gray-200"
-              >
-                <div class="flex items-center gap-2 overflow-hidden">
-                  <img v-if="typeof mat === 'object' && mat.type === 'quiz'" src="@/assets/icons/quiz.svg" class="w-5 h-5" alt="Quiz" />
-                  <img
-                    v-else-if="typeof mat === 'object' && mat.type === 'file'"
-                    src="@/assets/icons/file.svg"
-                    alt="File"
-                    class="w-5 h-5"
-                  />
-                  <img
-                    v-else
-                    src="@/assets/icons/link.svg"
-                    alt="Link"
-                    class="w-5 h-5"
-                  />
-
-                  <a
-                    v-if="typeof mat === 'object' && mat.type === 'url'"
-                    :href="mat.value"
-                    target="_blank"
-                    class="text-sm font-semibold truncate hover:underline text-[#0070BB]"
-                  >
-                    {{ mat.value }}
-                  </a>
-                  <span v-else class="text-sm font-semibold truncate">
-                    {{ typeof mat === "object" ? mat.value : mat }}
-                  </span>
-                </div>
-                <button
-                  type="button"
-                  @click="removeMaterial(index)"
-                  class="text-red-500 hover:text-red-700 p-1 font-bold text-4xl"
-                >
-                  &times;
+            <!-- SECTION: QUIZZES -->
+            <div v-if="materialType === 'quiz'">
+                <h4 class="font-bold text-gray-700 mb-2">Správa Kvízů:</h4>
+                <ul class="space-y-2 mb-3">
+                   <template v-for="(mat, index) in formData.materials" :key="index">
+                      <li v-if="typeof mat === 'object' && mat.type === 'quiz'" class="flex items-center justify-between bg-yellow-50 p-3 rounded border border-yellow-200">
+                         <div class="flex items-center gap-2">
+                            <span class="text-2xl">📝</span>
+                            <span class="font-bold text-[#b8860b] truncate max-w-[200px]">{{ mat.value }}</span>
+                            <span v-if="mat.uuid" class="text-xs bg-yellow-200 px-1 rounded text-yellow-800">Existující</span>
+                            <span v-else class="text-xs bg-green-200 px-1 rounded text-green-800">Nový</span>
+                         </div>
+                         <div class="flex gap-2">
+                             <button type="button" @click="openQuizModal(index)" class="text-[#0070BB] hover:underline text-sm font-bold">Upravit</button>
+                             <button type="button" @click="removeMaterial(index)" class="text-red-500 hover:text-red-700 text-sm font-bold">Odstranit</button>
+                         </div>
+                      </li>
+                   </template>
+                </ul>
+                <button type="button" @click="openQuizModal(null)" class="w-full py-2 border-2 border-dashed border-[#FFD93D] rounded bg-[#FFFcF0] text-[#B8860B] font-bold hover:bg-[#FFF5D1] transition-colors">
+                   + Vytvořit nový kvíz
                 </button>
-              </li>
-            </ul>
-            <p v-else class="text-sm text-gray-400 italic mb-3 text-center">
-              Zatím žádné materiály.
-            </p>
-
-            <!-- Inputs -->
-            <div v-if="materialType === 'url'" class="flex gap-2 items-start">
-              <div class="flex-grow">
-                <input
-                  v-model="newMaterialInput"
-                  @keydown.enter.prevent="addMaterial"
-                  @input="urlError = null"
-                  type="url"
-                  class="organic-input !py-2 !text-sm w-full"
-                  :class="{ '!border-red-500': urlError }"
-                  placeholder="https://..."
-                />
-                <p v-if="urlError" class="text-red-500 text-sm mt-1 font-bold">
-                  {{ urlError }}
-                </p>
-              </div>
-              <button
-                type="button"
-                @click="addMaterial"
-                class="organic-btn secondary !py-2 !px-4 h-[38px] flex items-center"
-              >
-                +
-              </button>
             </div>
 
-            <div v-else-if="materialType === 'file'" class="relative">
-              <input
-                type="file"
-                @change="handleFileUpload"
-                class="hidden"
-                id="file-upload"
-              />
-              <label
-                for="file-upload"
-                class="border-2 border-dashed border-gray-300 rounded-lg p-8 w-full flex flex-col items-center justify-center cursor-pointer hover:bg-gray-50 transition-colors gap-4"
-              >
-                <img
-                  src="@/assets/icons/file.svg"
-                  class="w-12 h-12 opacity-50"
-                  alt="File"
-                />
-                <span class="text-gray-500 font-bold text-lg"
-                  >Klikněte pro nahrání souboru</span
-                >
-              </label>
-            </div>
+            <!-- SECTION: OTHER MATERIALS -->
+            <div v-else>
+                <!-- Existing Materials List (Non-Quiz) -->
+                <ul v-if="formData.materials && formData.materials.length > 0" class="space-y-2 mb-3">
+                  <template v-for="(mat, index) in formData.materials" :key="index">
+                     <!-- Hide quizzes from this list -->
+                    <li v-if="typeof mat !== 'object' || mat.type !== 'quiz'" class="flex items-center justify-between bg-gray-50 p-2 rounded border border-gray-200">
+                        <div class="flex items-center gap-2 overflow-hidden">
+                           <img v-if="typeof mat === 'object' && mat.type === 'file'" src="@/assets/icons/file.svg" class="w-5 h-5" alt="File" />
+                           <img v-else src="@/assets/icons/link.svg" class="w-5 h-5" alt="Link" />
+                           
+                           <a v-if="typeof mat === 'object' && mat.type === 'url'" :href="mat.value" target="_blank" class="text-sm font-semibold truncate hover:underline text-[#0070BB]">
+                             {{ mat.value }}
+                           </a>
+                           <span v-else class="text-sm font-semibold truncate">
+                             {{ typeof mat === "object" ? mat.value : mat }}
+                           </span>
+                        </div>
+                        <button type="button" @click="removeMaterial(index)" class="text-red-500 hover:text-red-700 p-1 font-bold text-lg">&times;</button>
+                    </li>
+                  </template>
+                </ul>
 
-            <div v-else-if="materialType === 'quiz'" class="text-center py-4 bg-yellow-50 rounded-lg border border-yellow-200">
-               <span class="block text-sm text-gray-600 mb-2">Editor kvízu je otevřený.</span>
-               <button type="button" @click="openQuizModal" class="text-[#B8860B] font-bold text-sm hover:underline">Znovu otevřít editor</button>
+                <!-- Inputs for URL/File -->
+                <div v-if="materialType === 'url'" class="flex gap-2 items-start">
+                  <div class="flex-grow">
+                    <input v-model="newMaterialInput" @keydown.enter.prevent="addMaterial" @input="urlError = null" type="url" class="organic-input !py-2 !text-sm w-full" :class="{ '!border-red-500': urlError }" placeholder="https://..." />
+                    <p v-if="urlError" class="text-red-500 text-sm mt-1 font-bold">{{ urlError }}</p>
+                  </div>
+                  <button type="button" @click="addMaterial" class="organic-btn secondary !py-2 !px-4 h-[38px] flex items-center">+</button>
+                </div>
+
+                <div v-else-if="materialType === 'file'" class="relative">
+                  <input type="file" @change="handleFileUpload" class="hidden" id="file-upload" />
+                  <label for="file-upload" class="border-2 border-dashed border-gray-300 rounded-lg p-8 w-full flex flex-col items-center justify-center cursor-pointer hover:bg-gray-50 transition-colors gap-4">
+                    <img src="@/assets/icons/file.svg" class="w-12 h-12 opacity-50" alt="File" />
+                    <span class="text-gray-500 font-bold text-lg">Klikněte pro nahrání souboru</span>
+                  </label>
+                </div>
             </div>
           </div>
 
@@ -224,6 +167,8 @@
       <!-- Nested Quiz Modal -->
       <QuizModal
         :show="showQuizModal"
+        :edit-mode="editingQuizIndex !== null"
+        :initial-data="currentQuizData"
         @close="showQuizModal = false"
         @save="handleQuizSave"
       />
@@ -232,7 +177,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, watch } from "vue";
+import { ref, reactive, watch, nextTick } from "vue";
 import QuizModal from "./QuizModal.vue";
 
 interface Material {
@@ -240,6 +185,7 @@ interface Material {
   value: string;
   file?: File;
   data?: any; // Quiz data
+  uuid?: string; // For existing items
 }
 
 interface Course {
@@ -248,7 +194,8 @@ interface Course {
   description: string;
   category?: string;
   difficulty?: string;
-  materials?: (string | Material)[];
+  materials?: Material[];
+  quizzes?: any[]; // Backend structure might seperate them
 }
 
 const props = defineProps<{
@@ -267,7 +214,11 @@ const materialType = ref<"url" | "file" | "quiz">("url");
 const newMaterialInput = ref("");
 const urlError = ref<string | null>(null);
 const tempFile = ref<File | null>(null);
+
+// Quiz management state
 const showQuizModal = ref(false);
+const editingQuizIndex = ref<number | null>(null);
+const currentQuizData = ref<any>(null);
 
 const formData = reactive<Course>({
   name: "",
@@ -277,15 +228,21 @@ const formData = reactive<Course>({
   materials: [],
 });
 
-// Define resetForm
 const resetForm = () => {
   isEditing.value = false;
-  formData.uuid = undefined;
-  formData.name = "";
-  formData.description = "";
-  formData.category = "Programování";
-  formData.difficulty = "Začátečník";
-  formData.materials = [];
+  editingQuizIndex.value = null;
+  currentQuizData.value = null;
+  
+  // Use Object.assign to keep reactivity but clear data
+  Object.assign(formData, {
+    uuid: undefined,
+    name: "",
+    description: "",
+    category: "Programování",
+    difficulty: "Začátečník",
+    materials: [],
+  });
+
   newMaterialInput.value = "";
   urlError.value = null;
   tempFile.value = null;
@@ -293,21 +250,45 @@ const resetForm = () => {
   showQuizModal.value = false;
 };
 
-const initForm = () => {
+const initForm = async () => {
+  // Ensure DOM updates before filling form to avoid locking
+  await nextTick();
+  
   if (props.course) {
       isEditing.value = true;
-      formData.uuid = props.course.uuid;
-      formData.name = props.course.name;
-      formData.description = props.course.description;
-      formData.category = props.course.category || "Programování";
-      formData.difficulty = props.course.difficulty || "Začátečník";
-      formData.materials = [...(props.course.materials || [])];
+      
+      // Merge backend quizzes into materials if they are separate
+      const mergedMaterials = [...(props.course.materials || [])];
+      
+      if (props.course.quizzes && props.course.quizzes.length > 0) {
+          props.course.quizzes.forEach((q: any) => {
+              // Avoid duplicates if already in materials
+              const exists = mergedMaterials.some((m: any) => m.type === 'quiz' && (m.uuid === q.uuid || m.data?.uuid === q.uuid));
+              if (!exists) {
+                  mergedMaterials.push({
+                      type: 'quiz',
+                      value: q.title,
+                      data: q,
+                      uuid: q.uuid
+                  } as Material);
+              }
+          });
+      }
+
+      Object.assign(formData, {
+        uuid: props.course.uuid,
+        name: props.course.name,
+        description: props.course.description,
+        category: props.course.category || "Programování",
+        difficulty: props.course.difficulty || "Začátečník",
+        materials: JSON.parse(JSON.stringify(mergedMaterials)) // Deep copy to detach from props
+      });
+      
   } else {
       resetForm();
   }
 };
 
-// Watch 'show' to initialize form every time modal opens
 watch(
   () => props.show,
   (isOpen) => {
@@ -318,25 +299,17 @@ watch(
   { immediate: true }
 );
 
-// Watch props.course just in case it changes while open (edge case, but safe)
-watch(() => props.course, () => {
-    if (props.show) {
-       initForm();
-    }
-});
-
 const handleFileUpload = (event: Event) => {
   const target = event.target as HTMLInputElement;
   if (target.files && target.files.length > 0) {
     const file = target.files[0];
     if (file) {
-      formData.materials!.push({
+      (formData.materials as Material[]).push({
         type: "file",
         value: file.name,
         file: file,
       });
     }
-    // Reset input so same file can be selected again if needed (though unlikely here)
     target.value = "";
   }
 };
@@ -348,13 +321,11 @@ const addMaterial = () => {
       try {
         new URL(urlValue);
       } catch {
-        urlError.value =
-          "Prosím zadejte platnou URL adresu (např. https://example.com)";
+        urlError.value = "Prosím zadejte platnou URL adresu (např. https://example.com)";
         return;
       }
 
-      // Compatibility: wrap in object
-      formData.materials!.push({
+      (formData.materials as Material[]).push({
         type: "url",
         value: urlValue,
       });
@@ -363,7 +334,7 @@ const addMaterial = () => {
     }
   } else if (materialType.value === "file") {
     if (tempFile.value) {
-      formData.materials!.push({
+      (formData.materials as Material[]).push({
         type: "file",
         value: tempFile.value.name,
         file: tempFile.value,
@@ -379,25 +350,49 @@ const removeMaterial = (index: number) => {
 
 const saveCourse = () => {
   emit("save", { ...formData }, isEditing.value);
-  // Do NOT resetForm here. Wait for parent to close modal (which triggers watch->initForm/reset)
 };
 
 const close = () => {
   emit("close");
-  resetForm();
 };
 
-const openQuizModal = () => {
+// --- API PRO PRÁCI S KVÍZY ---
+
+const openQuizModal = (index: number | null = null) => {
+  editingQuizIndex.value = index;
+  
+  if (index !== null && formData.materials) {
+      // Load existing quiz data
+      const mat = formData.materials[index] as Material;
+      if (mat.type === 'quiz' && mat.data) {
+          currentQuizData.value = JSON.parse(JSON.stringify(mat.data));
+      }
+  } else {
+      currentQuizData.value = null;
+  }
+  
   showQuizModal.value = true;
 };
 
 const handleQuizSave = (quiz: any) => {
-  formData.materials!.push({
+  const quizMaterial: Material = {
     type: "quiz",
     value: quiz.title,
-    data: quiz,
-  });
+    data: quiz, // This contains questions, etc.
+    uuid: quiz.uuid // Keep UUID if editing existing
+  };
+
+  if (editingQuizIndex.value !== null && formData.materials) {
+      // Update existing
+      formData.materials[editingQuizIndex.value] = quizMaterial;
+  } else {
+      // Add new
+      (formData.materials as Material[]).push(quizMaterial);
+  }
+  
   showQuizModal.value = false;
+  editingQuizIndex.value = null;
+  currentQuizData.value = null;
 };
 </script>
 
