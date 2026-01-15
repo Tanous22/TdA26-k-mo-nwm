@@ -5,7 +5,7 @@ export async function initDatabase() {
   try {
     console.log("Initializing database schema...");
 
-    // 1. Tabulka USERS - základní auth
+    // 1. Tabulka USERS
     await pool.execute(`
       CREATE TABLE IF NOT EXISTS users (
         id INT AUTO_INCREMENT PRIMARY KEY,
@@ -16,7 +16,7 @@ export async function initDatabase() {
       )
     `);
 
-    // 2. Tabulka COURSES - persistentní uložení kurzů
+    // 2. Tabulka COURSES
     await pool.execute(`
       CREATE TABLE IF NOT EXISTS courses (
         id INT AUTO_INCREMENT PRIMARY KEY,
@@ -46,7 +46,7 @@ export async function initDatabase() {
       )
     `);
 
-    // 4. Tabulka QUIZZES (Kvízy)
+    // 4. Tabulka QUIZZES
     await pool.execute(`
       CREATE TABLE IF NOT EXISTS quizzes (
         id INT AUTO_INCREMENT PRIMARY KEY,
@@ -59,7 +59,7 @@ export async function initDatabase() {
       )
     `);
 
-    // 5. Tabulka QUIZ_QUESTIONS (Otázky)
+    // 5. Tabulka QUIZ_QUESTIONS
     await pool.execute(`
       CREATE TABLE IF NOT EXISTS quiz_questions (
         id INT AUTO_INCREMENT PRIMARY KEY,
@@ -74,7 +74,7 @@ export async function initDatabase() {
       )
     `);
 
-    // 6. Tabulka QUIZ_ATTEMPTS (Pokusy/Výsledky)
+    // 6. Tabulka QUIZ_ATTEMPTS
     await pool.execute(`
       CREATE TABLE IF NOT EXISTS quiz_attempts (
         id INT AUTO_INCREMENT PRIMARY KEY,
@@ -89,7 +89,7 @@ export async function initDatabase() {
     `);
 
     // 7. Tabulka FEED_EVENTS (Live Feed - FÁZE 4)
-    // Přidáno pro ukládání zpráv lektora a systémových událostí
+    // ZDE JSEM PŘIDAL SLOUPEC is_edited
     await pool.execute(`
       CREATE TABLE IF NOT EXISTS feed_events (
         id INT AUTO_INCREMENT PRIMARY KEY,
@@ -98,16 +98,16 @@ export async function initDatabase() {
         type ENUM('message', 'system') NOT NULL,
         content TEXT NOT NULL,
         author VARCHAR(255),
+        is_edited BOOLEAN DEFAULT FALSE, 
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         FOREIGN KEY (course_id) REFERENCES courses(id) ON DELETE CASCADE
       )
     `);
 
-    // Check, jestli už máme nějaká data
+    // Seed default usera
     const [rows] = await pool.execute("SELECT COUNT(*) AS count FROM users");
     const count = (rows as any)[0].count as number;
 
-    // Seed default usera
     if (count === 0) {
       await pool.execute(
         "INSERT INTO users (email, name) VALUES (?, ?)",
