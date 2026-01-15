@@ -9,6 +9,14 @@ import { quizzesRouter } from "./routes/quizzes.js";
 
 const app = express();
 
+// --- 1. ŠPIÓN (LOGOVÁNÍ KAŽDÉHO POŽADAVKU) ---
+// Díky tomuto uvidíš v terminálu [SERVER-SPY] kdykoliv se něco stane
+app.use((req, res, next) => {
+    console.log(`[SERVER-SPY] ${req.method} ${req.url}`);
+    next();
+});
+// ---------------------------------------------
+
 app.use(cors());
 app.use(express.json());
 
@@ -24,14 +32,14 @@ app.use("/", apiRoutes);
 // Připojení uživatelů
 apiRoutes.use("/users", userRoutes);
 
-// --- ZMĚNA POŘADÍ ---
-// Nejdřív musíme obsloužit konkrétní pod-stránky (materiály, kvízy)
+// --- 2. SPRÁVNÉ POŘADÍ (SPECIFICKÉ PRVNÍ!) ---
+// Nejdřív musíme obsloužit konkrétní pod-stránky
 apiRoutes.use("/courses/:courseId/materials", materialsRouter);
 apiRoutes.use("/courses/:courseId/quizzes", quizzesRouter);
 
 // Až nakonec obecné kurzy (jinak by to 'sežralo' i ty požadavky výše)
 apiRoutes.use("/courses", coursesRouter);
-// --------------------
+// ---------------------------------------------
 
 const port = process.env.PORT || 3000;
 

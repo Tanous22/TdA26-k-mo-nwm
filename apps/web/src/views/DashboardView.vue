@@ -21,13 +21,10 @@
       </div>
     </div>
 
-    <!-- Statistiky -->
-
     <h3 class="text-2xl font-bold mb-6 border-b-2 border-gray-200 pb-2">
       Moje Kurzy
     </h3>
 
-    <!-- Loading / Error -->
     <div v-if="loading" class="text-center text-gray-500 font-bold py-12">
       Načítání kurzů...
     </div>
@@ -35,7 +32,6 @@
       {{ error }}
     </div>
 
-    <!-- Seznam kurzů (Grid) -->
     <div v-else class="grid grid-cols-1 lg:grid-cols-2 gap-6">
       <div
         v-for="course in courses"
@@ -87,7 +83,6 @@
       </div>
     </div>
 
-    <!-- Modal -->
     <CourseModal
       :show="showModal"
       :course="editingCourse"
@@ -99,7 +94,6 @@
       @save="saveCourse"
     />
 
-    <!-- Delete Confirmation Modal -->
     <ConfirmationModal
       :show="showDeleteModal"
       title="Chcete kurz smazat?"
@@ -124,6 +118,9 @@ interface Course {
   materials?: any[];
 }
 
+// ZMĚNA: Definice API URL (tohle tu chybělo)
+const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:3000';
+
 const categories = ["Programování", "Design & Art", "Marketing", "Soft Skills"];
 const courses = ref<Course[]>([]);
 const showModal = ref(false);
@@ -144,11 +141,11 @@ const fetchCourses = async () => {
   try {
     loading.value = true;
     error.value = "";
-    const response = await fetch("/api/courses");
+    // ZMĚNA: Použití apiUrl místo /api
+    const response = await fetch(`${apiUrl}/courses`);
     if (!response.ok) throw new Error("Failed to fetch courses");
     const data = await response.json();
 
-    // Přidáme defaultní hodnoty
     courses.value = data.map((course: Course, index: number) => ({
       ...course,
       difficulty:
@@ -174,7 +171,8 @@ const saveCourse = async (courseData: Course, isEditing: boolean) => {
   try {
     if (isEditing && courseData.uuid) {
       // Update
-      const response = await fetch(`/api/courses/${courseData.uuid}`, {
+      // ZMĚNA: Použití apiUrl
+      const response = await fetch(`${apiUrl}/courses/${courseData.uuid}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(courseData),
@@ -182,7 +180,8 @@ const saveCourse = async (courseData: Course, isEditing: boolean) => {
       if (!response.ok) throw new Error("Failed to update course");
     } else {
       // Create
-      const response = await fetch("/api/courses", {
+      // ZMĚNA: Použití apiUrl
+      const response = await fetch(`${apiUrl}/courses`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(courseData),
@@ -192,7 +191,7 @@ const saveCourse = async (courseData: Course, isEditing: boolean) => {
 
     showModal.value = false;
     editingCourse.value = null;
-    await fetchCourses(); // Reload
+    await fetchCourses(); 
   } catch (err) {
     alert(err instanceof Error ? err.message : "Chyba při ukládání kurzu");
     console.error("Error saving course:", err);
@@ -208,11 +207,12 @@ const deleteCourse = async (uuid?: string) => {
 const confirmDelete = async () => {
   if (courseToDeleteId.value) {
     try {
-      const response = await fetch(`/api/courses/${courseToDeleteId.value}`, {
+      // ZMĚNA: Použití apiUrl
+      const response = await fetch(`${apiUrl}/courses/${courseToDeleteId.value}`, {
         method: "DELETE",
       });
       if (!response.ok) throw new Error("Failed to delete course");
-      await fetchCourses(); // Reload
+      await fetchCourses(); 
     } catch (err) {
       alert(err instanceof Error ? err.message : "Chyba při mazání kurzu");
       console.error("Error deleting course:", err);
