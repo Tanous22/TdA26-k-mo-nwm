@@ -6,6 +6,7 @@ import { userRoutes } from "./routes/users.js";
 import { materialsRouter } from "./routes/materials.js";
 import { coursesRouter } from "./routes/courses.js";
 import { quizzesRouter } from "./routes/quizzes.js";
+import { feedRouter } from "./routes/feed.js";
 
 const app = express();
 
@@ -33,9 +34,17 @@ apiRoutes.get("/", (_req, res) => {
 app.use("/", apiRoutes);
 apiRoutes.use("/users", userRoutes);
 
-// Důležité pořadí routerů
+// Live Feed (SSE) - FÁZE 4
+apiRoutes.use("/courses/:courseId/feed", feedRouter);
+
+// Kvízy
+apiRoutes.use("/courses/:courseId/quizzes", quizzesRouter);
+
+// Materiály
 apiRoutes.use("/courses/:courseId/materials", materialsRouter);
-apiRoutes.use("/courses/:courseId/quizzes", quizzesRouter); // Tady to musí chytat POST
+
+
+
 apiRoutes.use("/courses", coursesRouter);
 
 const port = process.env.PORT || 3000;

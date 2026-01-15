@@ -16,7 +16,7 @@ export async function initDatabase() {
       )
     `);
 
-    // 2. Tabulka COURSES - persistentní uložení kurzů (konec s in-memory polem!)
+    // 2. Tabulka COURSES - persistentní uložení kurzů
     await pool.execute(`
       CREATE TABLE IF NOT EXISTS courses (
         id INT AUTO_INCREMENT PRIMARY KEY,
@@ -67,14 +67,14 @@ export async function initDatabase() {
         quiz_id INT NOT NULL,
         type ENUM('singleChoice', 'multipleChoice') NOT NULL,
         question TEXT NOT NULL,
-        options JSON NOT NULL,          -- Pole textů: ["Odpověď A", "Odpověď B"]
-        correct_answer JSON NOT NULL,   -- Index (int) nebo pole indexů (array of ints)
+        options JSON NOT NULL,
+        correct_answer JSON NOT NULL,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         FOREIGN KEY (quiz_id) REFERENCES quizzes(id) ON DELETE CASCADE
       )
     `);
 
-    // 6. Tabulka QUIZ_ATTEMPTS (Pokusy/Výsledky - anonymní)
+    // 6. Tabulka QUIZ_ATTEMPTS (Pokusy/Výsledky)
     await pool.execute(`
       CREATE TABLE IF NOT EXISTS quiz_attempts (
         id INT AUTO_INCREMENT PRIMARY KEY,
@@ -88,11 +88,26 @@ export async function initDatabase() {
       )
     `);
 
-    // Check, jestli už máme nějaká data, ať nestartujeme s úplně prázdnou DB
+    // 7. Tabulka FEED_EVENTS (Live Feed - FÁZE 4)
+    // Přidáno pro ukládání zpráv lektora a systémových událostí
+    await pool.execute(`
+      CREATE TABLE IF NOT EXISTS feed_events (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        uuid VARCHAR(36) NOT NULL UNIQUE,
+        course_id INT NOT NULL,
+        type ENUM('message', 'system') NOT NULL,
+        content TEXT NOT NULL,
+        author VARCHAR(255),
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (course_id) REFERENCES courses(id) ON DELETE CASCADE
+      )
+    `);
+
+    // Check, jestli už máme nějaká data
     const [rows] = await pool.execute("SELECT COUNT(*) AS count FROM users");
     const count = (rows as any)[0].count as number;
 
-    // Seed default usera pro rychlé testování
+    // Seed default usera
     if (count === 0) {
       await pool.execute(
         "INSERT INTO users (email, name) VALUES (?, ?)",
@@ -103,7 +118,6 @@ export async function initDatabase() {
 
     console.log("Database schema initialized successfully!");
   } catch (error) {
-    // Pokud tohle failne, celá appka je v podstatě nepoužitelná
     console.error("CRITICAL: Error initializing database:", error);
   }
 }
