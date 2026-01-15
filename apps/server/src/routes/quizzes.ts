@@ -160,7 +160,7 @@ quizzesRouter.post("/", async (req: Request, res: Response) => {
 
         console.log("[DEBUG-QUIZ] All questions inserted successfully.");
 
-        // --- PŘIDÁNO: AUTOMATICKÁ UDÁLOST DO FEEDU (FÁZE 4) ---
+        // --- PŘIDÁNO: AUTOMATICKÁ UDÁLOST DO FEEDU ---
         try {
             const feedUuid = uuidv4();
             const feedContent = `Nový kvíz: ${title}`;
@@ -200,6 +200,7 @@ quizzesRouter.post("/", async (req: Request, res: Response) => {
 // GET /courses/:courseId/quizzes/:quizId - Detail
 quizzesRouter.get("/:quizId", async (req: Request, res: Response) => {
     const { quizId } = req.params;
+    console.log(`[DEBUG-QUIZ] GET Detail for ${quizId}`);
 
     try {
         const [rows] = await pool.execute(`
@@ -211,14 +212,19 @@ quizzesRouter.get("/:quizId", async (req: Request, res: Response) => {
         const quizData = (rows as any[])[0];
 
         if (!quizData) {
+            console.warn(`[DEBUG-QUIZ] Quiz not found for UUID ${quizId}`);
             res.status(404).json({ error: "Quiz not found" });
             return;
         }
+
+        console.log(`[DEBUG-QUIZ] Found Quiz Internal ID: ${quizData.id}`);
 
         const [questionRows] = await pool.execute(
             "SELECT * FROM quiz_questions WHERE quiz_id = ?",
             [quizData.id]
         );
+        
+        console.log(`[DEBUG-QUIZ] Found ${(questionRows as any[]).length} questions`);
 
         const questions = (questionRows as any[]).map(q => {
             const options = parseJson(q.options);

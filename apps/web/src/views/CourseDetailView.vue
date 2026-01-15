@@ -99,7 +99,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue';
+import { ref, computed, onMounted, nextTick } from 'vue';
 import { useRoute } from 'vue-router';
 import QuizRunner, { type Quiz } from '../components/QuizRunner.vue';
 import QuizModal from '../components/QuizModal.vue';
@@ -231,15 +231,24 @@ const openQuizModal = () => { editingQuiz.value = null; showQuizModal.value = tr
 const closeQuizModal = () => { showQuizModal.value = false; editingQuiz.value = null; };
 const startQuiz = (quiz: Quiz) => { activeQuiz.value = quiz; };
 
-// ZMĚNA: Async načítání detailu kvízu pro editaci
+// ZMĚNA: Použití nextTick pro zajištění reaktivity dat
 const editQuiz = async (quiz: Quiz) => {
   try {
     const res = await fetch(`${apiUrl}/courses/${courseId}/quizzes/${quiz.uuid}`);
     if (!res.ok) throw new Error("Nepodařilo se načíst detail kvízu");
     
     const fullQuizData = await res.json();
-    
+    console.log("Edit Quiz Data:", fullQuizData);
+
+    // Kontrola, zda jsou data v pořádku
+    if (!fullQuizData.questions || fullQuizData.questions.length === 0) {
+        console.warn("Kvíz nemá otázky v DB.");
+    }
+
     editingQuiz.value = fullQuizData; 
+    
+    // Počkáme, až Vue zpracuje změnu proměnné editingQuiz, než otevřeme modál
+    await nextTick();
     showQuizModal.value = true;
   } catch (e) {
     console.error(e);
