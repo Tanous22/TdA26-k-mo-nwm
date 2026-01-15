@@ -63,20 +63,21 @@
                         ? 'border-[#0070BB] bg-blue-50'
                         : 'border-gray-200 hover:border-gray-300'
                     ]"
-                    style="border-radius: 255px 15px 225px 15px / 15px 225px 15px 255px; box-shadow: 2px 3px 0px rgba(0,0,0,0.1);"
+                    style="border-radius: 255px 15px 225px 15px / 15px 225px 15px 255px;"
                   >
                     <input
                       type="radio"
+                      :name="'type-' + qIndex"
                       v-model="question.type"
                       value="single"
                       class="hidden"
+                      @change="handleTypeChange(qIndex)"
                     />
                     <div class="w-8 h-8 rounded-full bg-white border-2 border-[#0070BB] flex items-center justify-center text-[#0070BB] font-bold z-10 relative">
                       1
                     </div>
                     <div class="z-10 relative">
                       <span class="block font-bold text-sm text-gray-800">Jedna odpověď</span>
-                      <span class="block text-xs text-gray-500">Uživatel vybere pouze jednu</span>
                     </div>
                   </label>
 
@@ -87,20 +88,21 @@
                         ? 'border-[#0070BB] bg-blue-50'
                         : 'border-gray-200 hover:border-gray-300'
                     ]"
-                    style="border-radius: 15px 225px 15px 255px / 255px 15px 225px 15px; box-shadow: 2px 3px 0px rgba(0,0,0,0.1);"
+                    style="border-radius: 15px 225px 15px 255px / 255px 15px 225px 15px;"
                   >
                     <input
                       type="radio"
+                      :name="'type-' + qIndex"
                       v-model="question.type"
                       value="multiple"
                       class="hidden"
+                      @change="handleTypeChange(qIndex)"
                     />
                     <div class="w-8 h-8 rounded-full bg-white border-2 border-[#0070BB] flex items-center justify-center text-[#0070BB] font-bold z-10 relative">
                       N
                     </div>
                     <div class="z-10 relative">
                       <span class="block font-bold text-sm text-gray-800">Více odpovědí</span>
-                      <span class="block text-xs text-gray-500">Uživatel může vybrat více</span>
                     </div>
                   </label>
                 </div>
@@ -185,7 +187,7 @@
 </template>
 
 <script setup lang="ts">
-import { reactive, ref, watch } from "vue";
+import { ref, watch } from "vue";
 
 interface QuizOption {
   id: string;
@@ -218,83 +220,86 @@ const emit = defineEmits<{
 
 const errorMessage = ref<string | null>(null);
 
-const quizData = reactive<Quiz>({
+const quizData = ref<Quiz>({
   title: "",
   questions: [],
 });
 
 const resetForm = () => {
-  quizData.title = "";
-  quizData.questions = [
-    {
-      id: crypto.randomUUID(),
-      text: "",
-      type: "single",
-      options: [
-        { id: crypto.randomUUID(), text: "", isCorrect: true },
-        { id: crypto.randomUUID(), text: "", isCorrect: false },
-      ],
-    },
-  ];
+  quizData.value = {
+    title: "",
+    questions: [
+      {
+        id: crypto.randomUUID(),
+        text: "",
+        type: "single",
+        options: [
+          { id: crypto.randomUUID(), text: "", isCorrect: true },
+          { id: crypto.randomUUID(), text: "", isCorrect: false },
+        ],
+      },
+    ]
+  };
 };
 
-watch(() => props.show, (newVal) => {
-  if (newVal) {
+watch(() => props.show, (isOpen) => {
+  if (isOpen) {
     errorMessage.value = null;
+    
     if (props.editMode && props.initialData) {
-      const data = JSON.parse(JSON.stringify(props.initialData));
-      quizData.title = data.title;
-      
-      // Transform questions if they are in backend format
-      quizData.questions = data.questions.map((q: any) => {
-        // Detect if it's backend format (has 'question' property instead of 'text' or 'options' is array of strings)
-        const isBackendFormat = q.question !== undefined || (Array.isArray(q.options) && typeof q.options[0] === 'string');
+      try {
+        const sourceData = JSON.parse(JSON.stringify(props.initialData));
         
-        if (isBackendFormat) {
-            console.log("Detected backend quiz format, converting...", q);
-            const type = q.type === 'multipleChoice' ? 'multiple' : 'single';
-            
-            const options = q.options.map((optText: string, idx: number) => {
-                let isCorrect = false;
-                if (type === 'single') {
-                    isCorrect = q.correctIndex === idx;
-                } else {
-                    isCorrect = q.correctIndices?.includes(idx) ?? false;
-                }
-                return {
-                    id: crypto.randomUUID(),
-                    text: optText,
-                    isCorrect
-                };
-            });
+        const mappedQuestions = (sourceData.questions || []).map((q: any) => {
+          const isMultiple = q.type === 'multipleChoice' || q.type === 'multiple';
+          const type = isMultiple ? 'multiple' : 'single';
+          
+          const options = Array.isArray(q.options) ? q.options.map((opt: any, idx: number) => {
+             const text = typeof opt === 'string' ? opt : opt.text || "";
+             
+             let isCorrect = false;
+             if (type === 'single') {
+                isCorrect = q.correctIndex === idx || opt.isCorrect === true;
+             } else {
+                isCorrect = (q.correctIndices && q.correctIndices.includes(idx)) || opt.isCorrect === true;
+             }
 
-            return {
-                id: q.uuid || q.id || crypto.randomUUID(),
-                text: q.question || q.text || "", // Fallback
-                type: type,
-                options: options
-            };
-        }
+             return {
+               id: crypto.randomUUID(),
+               text: text,
+               isCorrect
+             };
+          }) : [];
 
-        // Standard Frontend Format
-        return {
-            ...q,
-            id: q.id || crypto.randomUUID(),
-            options: q.options.map((o: any) => ({ ...o, id: o.id || crypto.randomUUID() }))
+          if (options.length === 0) {
+             options.push({ id: crypto.randomUUID(), text: "", isCorrect: true });
+             options.push({ id: crypto.randomUUID(), text: "", isCorrect: false });
+          }
+
+          return {
+            id: crypto.randomUUID(),
+            text: q.question || q.text || "",
+            type: type,
+            options: options
+          };
+        });
+
+        quizData.value = {
+          title: sourceData.title || "",
+          questions: mappedQuestions
         };
-      });
+      } catch (e) {
+        console.error("Chyba při parsování kvízu:", e);
+        resetForm();
+      }
     } else {
       resetForm();
     }
   }
 });
 
-watch(() => quizData, () => {
-  if (errorMessage.value) errorMessage.value = null;
-}, { deep: true });
-
 const addQuestion = () => {
-  quizData.questions.push({
+  quizData.value.questions.push({
     id: crypto.randomUUID(),
     text: "",
     type: "single",
@@ -306,15 +311,15 @@ const addQuestion = () => {
 };
 
 const removeQuestion = (index: number) => {
-  if (quizData.questions.length > 1) {
-    quizData.questions.splice(index, 1);
+  if (quizData.value.questions.length > 1) {
+    quizData.value.questions.splice(index, 1);
   } else {
     errorMessage.value = "Kvíz musí mít alespoň jednu otázku.";
   }
 };
 
 const addOption = (qIndex: number) => {
-  const question = quizData.questions[qIndex];
+  const question = quizData.value.questions[qIndex];
   if (question) {
     question.options.push({
       id: crypto.randomUUID(),
@@ -325,7 +330,7 @@ const addOption = (qIndex: number) => {
 };
 
 const removeOption = (qIndex: number, oIndex: number) => {
-  const question = quizData.questions[qIndex];
+  const question = quizData.value.questions[qIndex];
   if (question && question.options.length > 2) {
     question.options.splice(oIndex, 1);
   } else {
@@ -333,8 +338,17 @@ const removeOption = (qIndex: number, oIndex: number) => {
   }
 };
 
+// ZMĚNA ZDE: Přidána kontrola existence otázky
+const handleTypeChange = (qIndex: number) => {
+  const question = quizData.value.questions[qIndex];
+  if (question && question.type === 'single') {
+    // Reset - první bude správně, ostatní ne
+    question.options.forEach((opt, i) => opt.isCorrect = (i === 0));
+  }
+};
+
 const setCorrectOption = (qIndex: number, oIndex: number) => {
-  const question = quizData.questions[qIndex];
+  const question = quizData.value.questions[qIndex];
   if (question && question.type === 'single') {
     question.options.forEach((opt, idx) => {
       opt.isCorrect = idx === oIndex;
@@ -348,12 +362,12 @@ const close = () => {
 };
 
 const validateQuiz = (): boolean => {
-  if (!quizData.title.trim()) {
+  if (!quizData.value.title.trim()) {
     errorMessage.value = "Prosím vyplňte název kvízu.";
     return false;
   }
-  for (let i = 0; i < quizData.questions.length; i++) {
-    const q = quizData.questions[i];
+  for (let i = 0; i < quizData.value.questions.length; i++) {
+    const q = quizData.value.questions[i];
     if (!q) continue;
 
     if (!q.text.trim()) {
@@ -375,12 +389,10 @@ const validateQuiz = (): boolean => {
 };
 
 const saveQuiz = () => {
-  console.log("Kliknuto na tlačítko saveQuiz");
   if (!validateQuiz()) {
       return;
   }
-  
-  emit("save", JSON.parse(JSON.stringify(quizData)));
+  emit("save", JSON.parse(JSON.stringify(quizData.value)));
   errorMessage.value = null;
 };
 </script>

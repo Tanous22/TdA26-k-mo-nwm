@@ -73,7 +73,7 @@
               <div class="flex gap-2 mt-4">
                 <button @click="startQuiz(quiz)" class="flex-1 organic-btn text-sm py-2 !bg-[#91F5AD] !text-[#1A1A1A] hover:!bg-[#0070BB] hover:!text-white border-2 border-transparent">Spustit kvíz</button>
                 <button v-if="isTeacher" @click="editQuiz(quiz)" class="p-2 text-gray-400 hover:text-[#0070BB] transition-colors">✎</button>
-                <button v-if="isTeacher" @click="deleteQuiz(quiz.uuid)" class="p-2 text-gray-400 hover:text-red-500 transition-colors">🗑️</button>
+                <button v-if="isTeacher" @click="openDeleteModal(quiz.uuid)" class="p-2 text-gray-400 hover:text-red-500 transition-colors">🗑️</button>
               </div>
             </div>
           </div>
@@ -88,6 +88,13 @@
     </div>
     
     <QuizModal :show="showQuizModal" :edit-mode="!!editingQuiz" :initial-data="editingQuiz" @close="closeQuizModal" @save="handleQuizSave"/>
+    
+    <ConfirmationModal 
+      :show="showDeleteModal" 
+      title="Opravdu chcete smazat tento kvíz?" 
+      @confirm="confirmDelete" 
+      @cancel="showDeleteModal = false"
+    />
   </div>
 </template>
 
@@ -96,6 +103,7 @@ import { ref, computed, onMounted } from 'vue';
 import { useRoute } from 'vue-router';
 import QuizRunner, { type Quiz } from '../components/QuizRunner.vue';
 import QuizModal from '../components/QuizModal.vue';
+import ConfirmationModal from '../components/ConfirmationModal.vue';
 import { useAuth } from '../composables/useAuth';
 
 const route = useRoute();
@@ -111,6 +119,10 @@ const showQuizModal = ref(false);
 const editingQuiz = ref<any>(null);
 const fileInput = ref<HTMLInputElement | null>(null);
 const course = ref<any>({});
+
+// Stav pro mazání
+const showDeleteModal = ref(false);
+const quizIdToDelete = ref<string | null>(null);
 
 const isTeacher = computed(() => user.value?.name?.toLowerCase().includes('lektor') || user.value?.email === 'lektor@example.com');
 
@@ -161,7 +173,7 @@ const fetchData = async () => {
   }
 };
 
-// 3. POMOCNÉ FUNKCE (PRO ODSTRANĚNÍ ERRORŮ)
+// 3. POMOCNÉ FUNKCE
 const handleAddLink = async () => {
   const url = prompt("Zadejte URL odkazu:");
   if (!url) return;
@@ -194,8 +206,8 @@ const handleFileUpload = async (event: Event) => {
   const formData = new FormData();
   formData.append('file', file);
   formData.append('type', 'file');
-  formData.append('name', file.name); // Backend vyžaduje name
-  formData.append('description', ""); // Backend může vyžadovat description
+  formData.append('name', file.name);
+  formData.append('description', "");
 
   try {
     const res = await fetch(`${apiUrl}/courses/${courseId}/materials`, { 
@@ -218,19 +230,46 @@ const handleFileUpload = async (event: Event) => {
 const openQuizModal = () => { editingQuiz.value = null; showQuizModal.value = true; };
 const closeQuizModal = () => { showQuizModal.value = false; editingQuiz.value = null; };
 const startQuiz = (quiz: Quiz) => { activeQuiz.value = quiz; };
-const editQuiz = (quiz: Quiz) => { editingQuiz.value = quiz; showQuizModal.value = true; };
 
-const deleteQuiz = async (quizUuid: string) => {
-  if (!confirm("Smazat?")) return;
-  await fetch(`${apiUrl}/courses/${courseId}/quizzes/${quizUuid}`, { method: 'DELETE' });
-  await fetchData();
+// ZMĚNA: Async načítání detailu kvízu pro editaci
+const editQuiz = async (quiz: Quiz) => {
+  try {
+    const res = await fetch(`${apiUrl}/courses/${courseId}/quizzes/${quiz.uuid}`);
+    if (!res.ok) throw new Error("Nepodařilo se načíst detail kvízu");
+    
+    const fullQuizData = await res.json();
+    
+    editingQuiz.value = fullQuizData; 
+    showQuizModal.value = true;
+  } catch (e) {
+    console.error(e);
+    alert("Chyba při načítání kvízu pro editaci.");
+  }
 };
 
-// 4. HLAVNÍ FUNKCE PRO ULOŽENÍ KVÍZU (S DEBUGEM)
-const handleQuizSave = async (quizData: any) => {
-  // DEBUG ALERT - Potvrzení přijetí dat
-  alert("🔔 PŘIJATO: CourseDetailView začíná zpracovávat data!");
+const openDeleteModal = (quizUuid: string) => {
+  quizIdToDelete.value = quizUuid;
+  showDeleteModal.value = true;
+};
 
+const confirmDelete = async () => {
+  if (!quizIdToDelete.value) return;
+  
+  try {
+    const res = await fetch(`${apiUrl}/courses/${courseId}/quizzes/${quizIdToDelete.value}`, { method: 'DELETE' });
+    if (!res.ok) throw new Error("Chyba při mazání");
+    await fetchData();
+  } catch (e) {
+    alert("Chyba při mazání kvízu.");
+    console.error(e);
+  } finally {
+    showDeleteModal.value = false;
+    quizIdToDelete.value = null;
+  }
+};
+
+// 4. HLAVNÍ FUNKCE PRO ULOŽENÍ KVÍZU
+const handleQuizSave = async (quizData: any) => {
   let payload;
   try {
       const backendQuestions = quizData.questions.map((q: any, i: number) => {
@@ -271,10 +310,6 @@ const handleQuizSave = async (quizData: any) => {
     ? `${apiUrl}/courses/${courseId}/quizzes/${editingQuiz.value.uuid}` 
     : `${apiUrl}/courses/${courseId}/quizzes`;
 
-  console.log("Saving Quiz to:", url);
-  // DEBUG ALERT - Kontrola URL
-  alert(`Odesílám POST na: ${url}`);
-
   try {
     const res = await fetch(url, {
       method: editingQuiz.value ? 'PUT' : 'POST',
@@ -292,7 +327,7 @@ const handleQuizSave = async (quizData: any) => {
     alert("✅ HOTOVO: Kvíz byl úspěšně uložen!");
   } catch (e: any) {
     console.error("Quiz Save Failed:", e);
-    alert(`❌ CHYBA PŘI ODESÍLÁNÍ (FETCH): ${e.message}`);
+    alert(`❌ CHYBA PŘI ODESÍLÁNÍ: ${e.message}`);
   }
 };
 
