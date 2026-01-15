@@ -25,7 +25,7 @@ interface Course {
     uuid: string;
     name: string;
     description: string;
-    difficulty: string; 
+    difficulty: string;
     materials: any[];
     quizzes: any[];
     feed: any[];
@@ -34,14 +34,54 @@ interface Course {
 // GET /courses
 coursesRouter.get("/", async (req: Request, res: Response) => {
     try {
-        const [rows] = await pool.execute("SELECT * FROM courses");
-        const courses = (rows as any[]).map(row => ({
-            uuid: row.uuid,
-            name: row.name,
-            description: row.description,
-            difficulty: row.difficulty || "",
-            materials: [], quizzes: [], feed: [] 
-        }));
+        const [rows] = await pool.execute("SELECT * FROM courses ORDER BY created_at DESC");
+        const courses = [];
+
+        for (const row of (rows as any[])) {
+            // Fetch materials for this course
+            const [materialRows] = await pool.execute(
+                `SELECT uuid, type, name, description, content, mime_type FROM materials WHERE course_id = ?`,
+                [row.id]
+            );
+            const materials = (materialRows as any[]).map(m => ({
+                uuid: m.uuid,
+                type: m.type,
+                name: m.name,
+                description: m.description,
+                mimeType: m.mime_type,
+                url: m.type === 'url' ? m.content : undefined,
+                fileUrl: m.type === 'file' ? `/uploads/${m.content}` : undefined
+            }));
+
+            // Fetch quizzes for this course
+            const [quizRows] = await pool.execute(
+                `SELECT * FROM quizzes WHERE course_id = ?`,
+                [row.id]
+            );
+            // We just need the quiz objects for the dashboard count/list. 
+            // Full question parsing might be heavy but let's at least give the correctly typed objects.
+            const quizzes = (quizRows as any[]).map(q => ({
+                uuid: q.uuid,
+                title: q.title,
+                // We could fetch questions here if needed, but for dashboard lists, usually the existence/count is enough.
+                // If the frontend relies on questions.length for some reason, we might need more, 
+                // but usually dashboard just shows "3 Quizzes".
+                // Let's keep questions empty to match the minimal "list" requirement, 
+                // but crucial is that 'quizzes' array has the right length.
+                questions: []
+            }));
+
+            courses.push({
+                uuid: row.uuid,
+                name: row.name,
+                description: row.description,
+                difficulty: row.difficulty || "",
+                materials,
+                quizzes,
+                feed: []
+            });
+        }
+
         res.status(200).json(courses);
     } catch (error) {
         console.error("Error fetching courses:", error);
@@ -52,8 +92,8 @@ coursesRouter.get("/", async (req: Request, res: Response) => {
 // POST /courses
 coursesRouter.post("/", async (req: Request, res: Response) => {
     if (!req.body || !req.body.name) {
-         res.status(400).json({ error: "Missing data" });
-         return;
+        res.status(400).json({ error: "Missing data" });
+        return;
     }
     const uuid = uuidv4();
     const { name, description = "", difficulty = "" } = req.body;
@@ -130,15 +170,15 @@ coursesRouter.get("/:courseId", async (req: Request, res: Response) => {
 // PUT /courses/:courseId
 coursesRouter.put("/:courseId", async (req: Request, res: Response) => {
     const { courseId } = req.params;
-    const { name, description, difficulty } = req.body; 
+    const { name, description, difficulty } = req.body;
     try {
         const [result] = await pool.execute(
             "UPDATE courses SET name = ?, description = ?, difficulty = ? WHERE uuid = ?",
             [name, description, difficulty || "", courseId]
         );
         if ((result as any).affectedRows === 0) {
-             res.status(404).json({ error: "Not found" });
-             return;
+            res.status(404).json({ error: "Not found" });
+            return;
         }
         res.status(200).json({ uuid: courseId, name, description, difficulty: difficulty || "", materials: [], quizzes: [], feed: [] });
     } catch (error) {
@@ -153,8 +193,8 @@ coursesRouter.delete("/:courseId", async (req: Request, res: Response) => {
     try {
         const [result] = await pool.execute("DELETE FROM courses WHERE uuid = ?", [courseId]);
         if ((result as any).affectedRows === 0) {
-             res.status(404).json({ error: "Not found" });
-             return;
+            res.status(404).json({ error: "Not found" });
+            return;
         }
         res.status(204).send();
     } catch (error) {

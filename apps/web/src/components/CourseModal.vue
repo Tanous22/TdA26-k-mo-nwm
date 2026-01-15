@@ -2,6 +2,7 @@
   <Teleport to="body">
     <div v-if="show" class="modal-overlay" @click.self="close">
       <div
+        :key="modalKey"
         class="organic-box bg-white p-8 max-w-2xl w-full relative animate-bounce-in max-h-[90vh] overflow-y-auto pointer-events-auto"
       >
         <button
@@ -250,6 +251,8 @@ const resetForm = () => {
   showQuizModal.value = false;
 };
 
+const modalKey = ref(0);
+
 const initForm = async () => {
   // Ensure DOM updates before filling form to avoid locking
   await nextTick();
@@ -296,6 +299,7 @@ watch(
   () => props.show,
   (isOpen) => {
     if (isOpen) {
+      modalKey.value++; // FORCE RE-RENDER of content
       initForm();
     }
   },
