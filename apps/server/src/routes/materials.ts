@@ -27,8 +27,6 @@ const upload = multer({
         }
         
         // KROK 2: Dvojitá kontrola přípony (pojistka)
-        // (Protože někdo může přejmenovat virus.exe na virus.jpg)
-        // V reálné produkci se kontrolují "magic numbers" (obsah souboru), ale pro soutěž stačí toto.
         const allowedExtensions = /\.(pdf|docx|txt|png|jpg|jpeg|gif|mp4|mp3)$/i;
         if (!file.originalname.match(allowedExtensions)) {
             return cb(new Error("UNSUPPORTED_FORMAT"));
@@ -99,6 +97,8 @@ materialsRouter.post("/", handleUpload, async (req: Request, res: Response) => {
     try {
         const { courseId } = req.params;
         const { type, name, description, url } = req.body;
+        // POJISTKA: Pokud je description undefined, dáme null
+        const safeDescription = description || null;
         const file = req.file;
 
         // Validace
@@ -125,7 +125,8 @@ materialsRouter.post("/", handleUpload, async (req: Request, res: Response) => {
         let mimeType = null;
 
         if (type === "url") {
-            content = url;
+            // POJISTKA: Pokud by url bylo undefined, dáme prázdný string (aby nespadl SQL)
+            content = url || "";
         } else if (type === "file") {
             if (!file) {
                  res.status(400).json({ error: "Chybí soubor" });
@@ -139,7 +140,7 @@ materialsRouter.post("/", handleUpload, async (req: Request, res: Response) => {
         await pool.execute(
             `INSERT INTO materials (uuid, course_id, type, name, description, content, mime_type) 
              VALUES (?, ?, ?, ?, ?, ?, ?)`,
-            [newUuid, dbCourseId, type, name, description, content, mimeType]
+            [newUuid, dbCourseId, type, name, safeDescription, content, mimeType]
         );
 
         // --- PŘIDÁNO: AUTOMATICKÁ UDÁLOST DO FEEDU (FÁZE 4) ---
