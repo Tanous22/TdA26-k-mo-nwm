@@ -151,7 +151,7 @@ const fetchCourses = async () => {
       difficulty:
         course.difficulty || ["Začátečník", "Pokročilý", "Expert"][index % 3],
       color: ["#91F5AD", "#0070BB", "#FF6B6B", "#FFD93D"][index % 4],
-      category: course.category || categories[index % 4],
+      category: course.category || "Programování", // Použít DB hodnotu nebo výchozí
     }));
   } catch (err) {
     error.value =

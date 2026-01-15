@@ -233,26 +233,48 @@ const startQuiz = (quiz: Quiz) => { activeQuiz.value = quiz; };
 
 // ZMĚNA: Použití nextTick pro zajištění reaktivity dat - TOTO OPRAVUJE "NEJDE PSÁT" A "CHYBÍ OTÁZKY"
 const editQuiz = async (quiz: Quiz) => {
+  console.log("[CourseDetail] Starting quiz edit for:", quiz.uuid);
+  
   try {
-    const res = await fetch(`${apiUrl}/courses/${courseId}/quizzes/${quiz.uuid}`);
-    if (!res.ok) throw new Error("Nepodařilo se načíst detail kvízu");
+    const fetchUrl = `${apiUrl}/courses/${courseId}/quizzes/${quiz.uuid}`;
+    console.log("[CourseDetail] Fetching quiz detail from:", fetchUrl);
+    
+    const res = await fetch(fetchUrl);
+    if (!res.ok) {
+      const errorText = await res.text();
+      throw new Error(`HTTP ${res.status}: ${errorText || res.statusText}`);
+    }
     
     const fullQuizData = await res.json();
-    console.log("Edit Quiz Data:", fullQuizData);
+    console.log("[CourseDetail] Received quiz data:", {
+      title: fullQuizData.title,
+      questionsCount: fullQuizData.questions?.length || 0,
+      uuid: fullQuizData.uuid
+    });
 
-    // Kontrola, zda jsou data v pořádku
+    // Validace dat
+    if (!fullQuizData.title) {
+        console.warn("[CourseDetail] Quiz has no title!");
+    }
+    
     if (!fullQuizData.questions || fullQuizData.questions.length === 0) {
-        console.warn("Kvíz nemá otázky v DB.");
+        console.warn("[CourseDetail] Quiz has no questions in DB!");
+        alert("⚠️ Tento kvíz nemá žádné otázky. Můžete je přidat.");
+    } else {
+        console.log("[CourseDetail] Quiz has", fullQuizData.questions.length, "questions");
     }
 
+    // Nastavit data pro editaci
     editingQuiz.value = fullQuizData; 
     
     // Počkáme, až Vue zpracuje změnu proměnné editingQuiz, než otevřeme modál
     await nextTick();
+    console.log("[CourseDetail] Opening quiz modal for edit");
     showQuizModal.value = true;
   } catch (e) {
-    console.error(e);
-    alert("Chyba při načítání kvízu pro editaci.");
+    const errorMsg = e instanceof Error ? e.message : "Neznámá chyba";
+    console.error("[CourseDetail] Edit quiz failed:", e);
+    alert(`❌ Chyba při načítání kvízu: ${errorMsg}`);
   }
 };
 
@@ -264,13 +286,28 @@ const openDeleteModal = (quizUuid: string) => {
 const confirmDelete = async () => {
   if (!quizIdToDelete.value) return;
   
+  console.log(`[CourseDetail] Attempting to delete quiz: ${quizIdToDelete.value}`);
+  
   try {
-    const res = await fetch(`${apiUrl}/courses/${courseId}/quizzes/${quizIdToDelete.value}`, { method: 'DELETE' });
-    if (!res.ok) throw new Error("Chyba při mazání");
+    const deleteUrl = `${apiUrl}/courses/${courseId}/quizzes/${quizIdToDelete.value}`;
+    console.log(`[CourseDetail] DELETE URL: ${deleteUrl}`);
+    
+    const res = await fetch(deleteUrl, { method: 'DELETE' });
+    
+    console.log(`[CourseDetail] DELETE Response Status: ${res.status}`);
+    
+    if (!res.ok) {
+      const errorText = await res.text();
+      throw new Error(`Chyba ${res.status}: ${errorText || res.statusText}`);
+    }
+    
+    console.log(`[CourseDetail] Quiz deleted successfully, refreshing data...`);
     await fetchData();
+    alert("✅ Kvíz byl úspěšně smazán!");
   } catch (e) {
-    alert("Chyba při mazání kvízu.");
-    console.error(e);
+    const errorMsg = e instanceof Error ? e.message : "Neznámá chyba";
+    console.error("[CourseDetail] Delete failed:", e);
+    alert(`❌ Chyba při mazání kvízu: ${errorMsg}`);
   } finally {
     showDeleteModal.value = false;
     quizIdToDelete.value = null;

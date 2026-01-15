@@ -165,6 +165,14 @@
         </form>
       </div>
 
+      <!-- Quiz Delete Confirmation Modal -->
+      <ConfirmationModal
+        :show="showQuizDeleteModal"
+        title="Opravdu chcete smazat tento kvíz?"
+        @confirm="confirmQuizDelete"
+        @cancel="showQuizDeleteModal = false"
+      />
+
       <!-- Nested Quiz Modal -->
       <QuizModal
         :show="showQuizModal"
@@ -180,6 +188,7 @@
 <script setup lang="ts">
 import { ref, reactive, watch, nextTick } from "vue";
 import QuizModal from "./QuizModal.vue";
+import ConfirmationModal from "./ConfirmationModal.vue";
 
 interface Material {
   type: "url" | "file" | "quiz";
@@ -221,6 +230,10 @@ const showQuizModal = ref(false);
 const editingQuizIndex = ref<number | null>(null);
 const currentQuizData = ref<any>(null);
 
+// Quiz deletion confirmation state
+const showQuizDeleteModal = ref(false);
+const quizIndexToDelete = ref<number | null>(null);
+
 const formData = reactive<Course>({
   name: "",
   description: "",
@@ -230,45 +243,55 @@ const formData = reactive<Course>({
 });
 
 const resetForm = () => {
+  console.log("[CourseModal] Resetting form...");
+  
   isEditing.value = false;
   editingQuizIndex.value = null;
   currentQuizData.value = null;
+  quizIndexToDelete.value = null;
+  showQuizDeleteModal.value = false;
+  showQuizModal.value = false;
   
-  // Use Object.assign to keep reactivity but clear data
-  Object.assign(formData, {
-    uuid: undefined,
-    name: "",
-    description: "",
-    category: "Programování",
-    difficulty: "Začátečník",
-    materials: [],
-  });
+  // KRITICKÁ ZMĚNA: Místo Object.assign vytvoříme nové hodnoty
+  // Toto nutí Vue vytvořit novou reaktivitu
+  formData.uuid = undefined;
+  formData.name = "";
+  formData.description = "";
+  formData.category = "Programování";
+  formData.difficulty = "Začátečník";
+  formData.materials = [];
 
   newMaterialInput.value = "";
   urlError.value = null;
   tempFile.value = null;
   materialType.value = "url";
-  showQuizModal.value = false;
+  
+  console.log("[CourseModal] Form reset complete");
 };
 
 const modalKey = ref(0);
 
 const initForm = async () => {
-  // Ensure DOM updates before filling form to avoid locking
+  console.log("[CourseModal] Initializing form, editing:", !!props.course);
+  
+  // DŮLEŽITÉ: Počkat na DOM update a pak resetovat
   await nextTick();
   
   if (props.course) {
       isEditing.value = true;
       
-      // DEEP CLONE: Break all references to props
+      // DEEP CLONE: Zlomit všechny reference na props
       const safeCourse = JSON.parse(JSON.stringify(props.course));
       
-      // Merge backend quizzes into materials if they are separate
+      console.log("[CourseModal] Loading course:", safeCourse.name, "Materials:", safeCourse.materials?.length);
+      
+      // Sloučit backend kvízy do materiálů pokud jsou oddělené
       const mergedMaterials = safeCourse.materials || [];
       
       if (safeCourse.quizzes && safeCourse.quizzes.length > 0) {
+          console.log("[CourseModal] Merging", safeCourse.quizzes.length, "quizzes into materials");
           safeCourse.quizzes.forEach((q: any) => {
-              // Avoid duplicates if already in materials
+              // Vyhnout se duplikátům pokud již v materiálech jsou
               const exists = mergedMaterials.some((m: any) => m.type === 'quiz' && (m.uuid === q.uuid || m.data?.uuid === q.uuid));
               if (!exists) {
                   mergedMaterials.push({
@@ -281,16 +304,17 @@ const initForm = async () => {
           });
       }
 
-      Object.assign(formData, {
-        uuid: safeCourse.uuid,
-        name: safeCourse.name,
-        description: safeCourse.description,
-        category: safeCourse.category || "Programování",
-        difficulty: safeCourse.difficulty || "Začátečník",
-        materials: mergedMaterials
-      });
+      // PŘÍMÉ PŘIŘAZENÍ místo Object.assign - lepší reaktivita
+      formData.uuid = safeCourse.uuid;
+      formData.name = safeCourse.name;
+      formData.description = safeCourse.description;
+      formData.category = safeCourse.category || "Programování";
+      formData.difficulty = safeCourse.difficulty || "Začátečník";
+      formData.materials = mergedMaterials;
       
+      console.log("[CourseModal] Form loaded with materials:", formData.materials?.length || 0);
   } else {
+      console.log("[CourseModal] No course provided, resetting form");
       resetForm();
   }
 };
@@ -352,7 +376,25 @@ const addMaterial = () => {
 };
 
 const removeMaterial = (index: number) => {
-  formData.materials!.splice(index, 1);
+  const material = formData.materials![index];
+  
+  // Pokud je to kvíz, zobraz potvrzovací dialog
+  if (typeof material === 'object' && material.type === 'quiz') {
+    quizIndexToDelete.value = index;
+    showQuizDeleteModal.value = true;
+  } else {
+    // Pro ostatní materiály smaž rovnou
+    formData.materials!.splice(index, 1);
+  }
+};
+
+const confirmQuizDelete = () => {
+  if (quizIndexToDelete.value !== null) {
+    console.log(`[CourseModal] Deleting quiz at index ${quizIndexToDelete.value}`);
+    formData.materials!.splice(quizIndexToDelete.value, 1);
+  }
+  showQuizDeleteModal.value = false;
+  quizIndexToDelete.value = null;
 };
 
 const saveCourse = () => {
