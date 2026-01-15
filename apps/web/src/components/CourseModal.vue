@@ -2,7 +2,7 @@
   <Teleport to="body">
     <div v-if="show" class="modal-overlay" @click.self="close">
       <div
-        class="organic-box bg-white p-8 max-w-lg w-full relative animate-bounce-in max-h-[90vh] overflow-y-auto"
+        class="organic-box bg-white p-8 max-w-2xl w-full relative animate-bounce-in max-h-[90vh] overflow-y-auto pointer-events-auto"
       >
         <button
           @click="close"
@@ -257,11 +257,14 @@ const initForm = async () => {
   if (props.course) {
       isEditing.value = true;
       
-      // Merge backend quizzes into materials if they are separate
-      const mergedMaterials = [...(props.course.materials || [])];
+      // DEEP CLONE: Break all references to props
+      const safeCourse = JSON.parse(JSON.stringify(props.course));
       
-      if (props.course.quizzes && props.course.quizzes.length > 0) {
-          props.course.quizzes.forEach((q: any) => {
+      // Merge backend quizzes into materials if they are separate
+      const mergedMaterials = safeCourse.materials || [];
+      
+      if (safeCourse.quizzes && safeCourse.quizzes.length > 0) {
+          safeCourse.quizzes.forEach((q: any) => {
               // Avoid duplicates if already in materials
               const exists = mergedMaterials.some((m: any) => m.type === 'quiz' && (m.uuid === q.uuid || m.data?.uuid === q.uuid));
               if (!exists) {
@@ -276,12 +279,12 @@ const initForm = async () => {
       }
 
       Object.assign(formData, {
-        uuid: props.course.uuid,
-        name: props.course.name,
-        description: props.course.description,
-        category: props.course.category || "Programování",
-        difficulty: props.course.difficulty || "Začátečník",
-        materials: JSON.parse(JSON.stringify(mergedMaterials)) // Deep copy to detach from props
+        uuid: safeCourse.uuid,
+        name: safeCourse.name,
+        description: safeCourse.description,
+        category: safeCourse.category || "Programování",
+        difficulty: safeCourse.difficulty || "Začátečník",
+        materials: mergedMaterials
       });
       
   } else {

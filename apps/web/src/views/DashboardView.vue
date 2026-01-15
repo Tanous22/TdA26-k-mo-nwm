@@ -229,9 +229,10 @@ const saveCourse = async (courseData: Course, isEditing: boolean) => {
        }
     }
 
+    await fetchCourses(); 
     showModal.value = false;
     editingCourse.value = null;
-    await fetchCourses(); 
+    
     alert(isEditing ? "Kurz a kvízy byly uloženy." : "Nový kurz a kvízy byly vytvořeny.");
 
   } catch (err) {
