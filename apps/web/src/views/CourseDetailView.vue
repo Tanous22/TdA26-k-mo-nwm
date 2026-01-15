@@ -172,7 +172,7 @@ const handleAddLink = async () => {
     const res = await fetch(`${apiUrl}/courses/${courseId}/materials`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ type: 'url', name, url })
+      body: JSON.stringify({ type: 'url', name, url, description: "" })
     });
 
     if (!res.ok) {
@@ -194,6 +194,8 @@ const handleFileUpload = async (event: Event) => {
   const formData = new FormData();
   formData.append('file', file);
   formData.append('type', 'file');
+  formData.append('name', file.name); // Backend vyžaduje name
+  formData.append('description', ""); // Backend může vyžadovat description
 
   try {
     const res = await fetch(`${apiUrl}/courses/${courseId}/materials`, { 
