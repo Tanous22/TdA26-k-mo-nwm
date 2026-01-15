@@ -244,11 +244,45 @@ watch(() => props.show, (newVal) => {
     if (props.editMode && props.initialData) {
       const data = JSON.parse(JSON.stringify(props.initialData));
       quizData.title = data.title;
-      quizData.questions = data.questions.map((q: any) => ({
-        ...q,
-        id: q.id || crypto.randomUUID(),
-        options: q.options.map((o: any) => ({ ...o, id: o.id || crypto.randomUUID() }))
-      }));
+      
+      // Transform questions if they are in backend format
+      quizData.questions = data.questions.map((q: any) => {
+        // Detect if it's backend format (has 'question' property instead of 'text' or 'options' is array of strings)
+        const isBackendFormat = q.question !== undefined || (Array.isArray(q.options) && typeof q.options[0] === 'string');
+        
+        if (isBackendFormat) {
+            console.log("Detected backend quiz format, converting...", q);
+            const type = q.type === 'multipleChoice' ? 'multiple' : 'single';
+            
+            const options = q.options.map((optText: string, idx: number) => {
+                let isCorrect = false;
+                if (type === 'single') {
+                    isCorrect = q.correctIndex === idx;
+                } else {
+                    isCorrect = q.correctIndices?.includes(idx) ?? false;
+                }
+                return {
+                    id: crypto.randomUUID(),
+                    text: optText,
+                    isCorrect
+                };
+            });
+
+            return {
+                id: q.uuid || q.id || crypto.randomUUID(),
+                text: q.question || q.text || "", // Fallback
+                type: type,
+                options: options
+            };
+        }
+
+        // Standard Frontend Format
+        return {
+            ...q,
+            id: q.id || crypto.randomUUID(),
+            options: q.options.map((o: any) => ({ ...o, id: o.id || crypto.randomUUID() }))
+        };
+      });
     } else {
       resetForm();
     }
@@ -342,15 +376,10 @@ const validateQuiz = (): boolean => {
 
 const saveQuiz = () => {
   console.log("Kliknuto na tlačítko saveQuiz");
-  // DEBUG ALERT
-  alert("🛑 DEBUG: Tlačítko v Modalu funguje! Pokud to vidíš, validace ještě nezačala."); 
-  
   if (!validateQuiz()) {
-      alert("❌ VALIDACE SELHALA: " + errorMessage.value);
       return;
   }
   
-  alert("✅ Vše OK, odesílám data do CourseDetailView...");
   emit("save", JSON.parse(JSON.stringify(quizData)));
   errorMessage.value = null;
 };
