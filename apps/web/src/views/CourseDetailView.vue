@@ -231,7 +231,7 @@ const openQuizModal = () => { editingQuiz.value = null; showQuizModal.value = tr
 const closeQuizModal = () => { showQuizModal.value = false; editingQuiz.value = null; };
 const startQuiz = (quiz: Quiz) => { activeQuiz.value = quiz; };
 
-// ZMĚNA: Použití nextTick pro zajištění reaktivity dat
+// ZMĚNA: Použití nextTick pro zajištění reaktivity dat - TOTO OPRAVUJE "NEJDE PSÁT" A "CHYBÍ OTÁZKY"
 const editQuiz = async (quiz: Quiz) => {
   try {
     const res = await fetch(`${apiUrl}/courses/${courseId}/quizzes/${quiz.uuid}`);
