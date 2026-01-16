@@ -215,9 +215,7 @@ const emit = defineEmits<{
   save: [course: Course, isEditing: boolean];
 }>();
 
-// ZMĚNA: Přidán stav připravenosti formuláře pro "tvrdý reset"
 const isFormReady = ref(false);
-
 const isEditing = ref(false);
 const materialType = ref<"url" | "file" | "quiz">("url");
 const newMaterialInput = ref("");
@@ -242,10 +240,8 @@ const defaultFormState = (): Course => ({
 
 const formData = ref<Course>(defaultFormState());
 
-// ZMĚNA: Funkce initForm nyní kompletně zabije a znovu vytvoří formulář
 const initForm = async () => {
   console.log("[CourseModal] initForm start, show=", props.show, "course=", props.course?.name);
-  // 1. Schováme formulář (zničíme staré inputy v DOMu)
   isFormReady.value = false;
   await nextTick(); 
   
@@ -286,27 +282,20 @@ const initForm = async () => {
   tempFile.value = null;
   materialType.value = "url";
 
-  // 2. Oživíme formulář (vytvoří se nové čisté inputy napojené na data)
   await nextTick();
   isFormReady.value = true;
-  console.log("[CourseModal] initForm done, isFormReady=", isFormReady.value);
 };
 
 watch(
   () => props.show,
   async (isOpen) => {
-    console.log("[CourseModal] watch triggered, isOpen=", isOpen);
     if (isOpen) {
-      // OPRAVA: Nejdříve resetujeme, pak až inicializujeme
       isFormReady.value = false;
       await nextTick();
-      
       modalKey.value++;
       await nextTick();
-      
-      await initForm();  // OPRAVA: Await tady aby se počkalo na inicializaci
+      await initForm();
     } else {
-      // Při zavření pro jistotu taky vyčistíme
       isFormReady.value = false;
       editingQuizIndex.value = null;
       currentQuizData.value = null;
@@ -361,18 +350,47 @@ const addMaterial = () => {
   }
 };
 
-const removeMaterial = (index: number) => {
+// --- UPRAVENÁ FUNKCE: Mazání materiálu přes DELETE API ---
+const removeMaterial = async (index: number) => {
   if (!formData.value.materials) return;
   
   const material = formData.value.materials[index];
   if (!material) return;
-  
+
+  // Pokud je to Kvíz, použijeme starou logiku s modálem (nebo přes API v confirmQuizDelete)
   if (material.type === 'quiz') {
     quizIndexToDelete.value = index;
     showQuizDeleteModal.value = true;
-  } else {
-    formData.value.materials.splice(index, 1);
+    return;
   }
+  
+  // Pokud je to existující soubor/link (má UUID), smažeme ho ze serveru
+  if (material.uuid) {
+      if(!confirm(`Opravdu chcete smazat materiál "${material.value}"? Tato akce je nevratná.`)) {
+          return;
+      }
+      
+      try {
+          // DELETE /courses/:courseId/materials/:materialId
+          // Předpokládáme, že známe courseId (formData.value.uuid)
+          if (!formData.value.uuid) throw new Error("Chybí ID kurzu.");
+
+          const response = await fetch(`${apiUrl}/courses/${formData.value.uuid}/materials/${material.uuid}`, {
+              method: 'DELETE'
+          });
+
+          if (!response.ok) throw new Error("Chyba při mazání na serveru.");
+          
+          alert("Materiál byl smazán.");
+      } catch (e) {
+          console.error("Chyba DELETE material:", e);
+          alert("Nepodařilo se smazat materiál ze serveru.");
+          return; // Nemažeme lokálně, pokud selhal server
+      }
+  }
+
+  // Smazat lokálně (buď byl smazán na serveru, nebo to byl jen draft)
+  formData.value.materials.splice(index, 1);
 };
 
 const confirmQuizDelete = async () => {
@@ -405,35 +423,26 @@ const close = () => {
   emit("close");
 };
 
-// --- API PRO KVÍZY ---
 const openQuizModal = async (index: number | null = null) => {
   editingQuizIndex.value = index;
   
   if (index !== null && formData.value.materials) {
       const mat = formData.value.materials[index];
       
-      // 1. POKUD MÁ KVÍZ UUID (JE UŽ ULOŽENÝ), STÁHNEME DETAIL ZE SERVERU
       if (mat && mat.type === 'quiz' && mat.uuid && formData.value.uuid) {
           try {
-             console.log(`[CourseModal] Fetching quiz details: ${mat.uuid}`);
              const res = await fetch(`${apiUrl}/courses/${formData.value.uuid}/quizzes/${mat.uuid}`);
-             
              if (res.ok) {
                  const detailedQuiz = await res.json();
-                 console.log("[CourseModal] Quiz details loaded:", detailedQuiz.questions?.length);
                  mat.data = detailedQuiz; 
-             } else {
-                 console.error("[CourseModal] Failed to load quiz details");
              }
           } catch (e) {
              console.error("[CourseModal] Error fetching quiz:", e);
           }
       }
 
-      // 2. PŘÍPRAVA DAT PRO EDITOR
       if (mat && mat.type === 'quiz' && mat.data) {
           const rawData = JSON.parse(JSON.stringify(mat.data));
-          
           if (rawData.questions) {
              rawData.questions = rawData.questions.map((q: any) => {
                 if (q.options && typeof q.options[0] === 'object') return q;
@@ -485,7 +494,3 @@ const handleQuizSave = (quiz: any) => {
   currentQuizData.value = null;
 };
 </script>
-
-<style scoped>
-/* Případné styly */
-</style>

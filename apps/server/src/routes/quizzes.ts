@@ -131,16 +131,18 @@ quizzesRouter.post("/", async (req: Request, res: Response) => {
             
             console.log(`[DEBUG-QUIZ] Processing question ${index + 1} (${q.type})`);
 
+            // --- OPRAVA: Ošetření undefined hodnot ---
             if (q.type === 'singleChoice') {
-                correctAnswer = q.correctIndex; 
+                correctAnswer = q.correctIndex ?? 0; // Default 0
             } else if (q.type === 'multipleChoice') {
-                correctAnswer = q.correctIndices;
+                correctAnswer = q.correctIndices || []; // Default []
             }
 
-            // Log what we are about to insert
-            const optionsStr = JSON.stringify(q.options);
-            const correctStr = JSON.stringify(correctAnswer);
-            console.log(`[DEBUG-QUIZ] Inserting question: type=${q.type}, options=${optionsStr}, answer=${correctStr}`);
+            const safeQuestion = q.question || ""; // Default prázdný string
+            const safeOptions = JSON.stringify(q.options || []); // Default prázdné pole
+            const safeCorrectAnswer = JSON.stringify(correctAnswer);
+
+            console.log(`[DEBUG-QUIZ] Inserting question: type=${q.type}, options=${safeOptions}, answer=${safeCorrectAnswer}`);
 
             await pool.execute(
                 `INSERT INTO quiz_questions (uuid, quiz_id, type, question, options, correct_answer) 
@@ -148,10 +150,10 @@ quizzesRouter.post("/", async (req: Request, res: Response) => {
                 [
                     qUuid, 
                     newQuizId, 
-                    q.type, 
-                    q.question, 
-                    optionsStr, 
-                    correctStr
+                    q.type || 'singleChoice', // Pojistka typu
+                    safeQuestion, 
+                    safeOptions, 
+                    safeCorrectAnswer
                 ]
             );
             
@@ -160,18 +162,16 @@ quizzesRouter.post("/", async (req: Request, res: Response) => {
 
         console.log("[DEBUG-QUIZ] All questions inserted successfully.");
 
-        // --- PŘIDÁNO: AUTOMATICKÁ UDÁLOST DO FEEDU ---
+        // --- AUTOMATICKÁ UDÁLOST DO FEEDU ---
         try {
             const feedUuid = uuidv4();
             const feedContent = `Nový kvíz: ${title}`;
 
-            // 1. Zápis do DB feedu
             await pool.execute(
                 "INSERT INTO feed_events (uuid, course_id, type, content, author, created_at) VALUES (?, ?, ?, ?, ?, NOW())",
                 [feedUuid, dbCourseId, "system", feedContent, null]
             );
 
-            // 2. Odeslání přes SSE
             broadcastToCourse(courseId, {
                 uuid: feedUuid,
                 type: "system",
@@ -182,7 +182,6 @@ quizzesRouter.post("/", async (req: Request, res: Response) => {
         } catch (feedError) {
             console.error("[DEBUG-QUIZ] Nepodařilo se zapsat do feedu:", feedError);
         }
-        // --------------------------------------------------------
 
         res.status(201).json({
             uuid: quizUuid,
@@ -217,15 +216,11 @@ quizzesRouter.get("/:quizId", async (req: Request, res: Response) => {
             return;
         }
 
-        console.log(`[DEBUG-QUIZ] Found Quiz Internal ID: ${quizData.id}`);
-
         const [questionRows] = await pool.execute(
             "SELECT * FROM quiz_questions WHERE quiz_id = ?",
             [quizData.id]
         );
         
-        console.log(`[DEBUG-QUIZ] Found ${(questionRows as any[]).length} questions`);
-
         const questions = (questionRows as any[]).map(q => {
             const options = parseJson(q.options);
             const correctAnswer = parseJson(q.correct_answer);
@@ -257,7 +252,6 @@ quizzesRouter.get("/:quizId", async (req: Request, res: Response) => {
 });
 
 // PUT - Update kvízu
-// PUT - Update kvízu (Chytrý update: Insert/Update/Delete)
 quizzesRouter.put("/:quizId", async (req: Request, res: Response) => {
     const { quizId, courseId } = req.params;
     const { title, questions } = req.body;
@@ -276,52 +270,52 @@ quizzesRouter.put("/:quizId", async (req: Request, res: Response) => {
         // 2. Aktualizace názvu kvízu
         await pool.execute("UPDATE quizzes SET title = ? WHERE id = ?", [title, dbQuizId]);
 
-        // 3. Načteme existující UUID otázek v DB (abychom věděli, co smazat)
+        // 3. Načteme existující UUID otázek v DB
         const [existingRows] = await pool.execute("SELECT uuid FROM quiz_questions WHERE quiz_id = ?", [dbQuizId]);
         const existingUuids = (existingRows as any[]).map(r => r.uuid);
         
-        const keptUuids: string[] = []; // Seznam UUID, která v kvízu zůstávají
+        const keptUuids: string[] = []; 
         const savedQuestions = [];
 
         // 4. Projdeme otázky z formuláře
         for (const q of questions) {
-            // Příprava dat
+            // --- OPRAVA: Ošetření undefined hodnot (aby nepadal bind error) ---
             let correctAnswer: any = null;
-            if (q.type === 'singleChoice') correctAnswer = q.correctIndex;
-            else if (q.type === 'multipleChoice') correctAnswer = q.correctIndices;
+            if (q.type === 'singleChoice') correctAnswer = q.correctIndex ?? 0;
+            else if (q.type === 'multipleChoice') correctAnswer = q.correctIndices || [];
 
-            const optionsStr = JSON.stringify(q.options);
+            const safeQuestion = q.question || ""; 
+            const optionsStr = JSON.stringify(q.options || []);
             const correctStr = JSON.stringify(correctAnswer);
 
             if (q.uuid && existingUuids.includes(q.uuid)) {
-                // --- A) UPDATE: Otázka už existuje, jen ji upravíme ---
+                // --- A) UPDATE ---
                 console.log(`[DEBUG-QUIZ] Updating question ${q.uuid}`);
                 await pool.execute(
                     `UPDATE quiz_questions 
                      SET type = ?, question = ?, options = ?, correct_answer = ? 
                      WHERE uuid = ? AND quiz_id = ?`,
-                    [q.type, q.question, optionsStr, correctStr, q.uuid, dbQuizId]
+                    [q.type, safeQuestion, optionsStr, correctStr, q.uuid, dbQuizId]
                 );
                 keptUuids.push(q.uuid);
-                savedQuestions.push(q); // Vracíme původní objekt (má UUID)
+                savedQuestions.push(q); 
             } else {
-                // --- B) INSERT: Otázka je nová nebo nemá UUID ---
+                // --- B) INSERT ---
                 const newUuid = uuidv4();
                 console.log(`[DEBUG-QUIZ] Inserting new question ${newUuid}`);
                 await pool.execute(
                     `INSERT INTO quiz_questions (uuid, quiz_id, type, question, options, correct_answer) 
                      VALUES (?, ?, ?, ?, ?, ?)`,
-                    [newUuid, dbQuizId, q.type, q.question, optionsStr, correctStr]
+                    [newUuid, dbQuizId, q.type, safeQuestion, optionsStr, correctStr]
                 );
-                savedQuestions.push({ ...q, uuid: newUuid }); // Vracíme s novým UUID
+                savedQuestions.push({ ...q, uuid: newUuid });
             }
         }
 
-        // 5. DELETE: Smažeme otázky, které byly v DB, ale v novém seznamu už nejsou
+        // 5. DELETE: Smažeme odstraněné otázky
         const toDelete = existingUuids.filter(id => !keptUuids.includes(id));
         if (toDelete.length > 0) {
-            console.log(`[DEBUG-QUIZ] Deleting ${toDelete.length} removed questions: ${toDelete.join(', ')}`);
-            // Dynamicky vytvoříme zástupné znaky (?, ?, ?) podle počtu mazaných
+            console.log(`[DEBUG-QUIZ] Deleting ${toDelete.length} removed questions`);
             const placeholders = toDelete.map(() => '?').join(',');
             await pool.execute(
                 `DELETE FROM quiz_questions WHERE uuid IN (${placeholders}) AND quiz_id = ?`,
@@ -329,35 +323,35 @@ quizzesRouter.put("/:quizId", async (req: Request, res: Response) => {
             );
         }
 
-        // 6. Spočítáme pokusy pro odpověď
+        // 6. Počet pokusů
         const [countRows] = await pool.execute("SELECT COUNT(*) as count FROM quiz_attempts WHERE quiz_id = ?", [dbQuizId]);
         const count = (countRows as any)[0].count;
 
-        // --- PŘIDÁNO: AUTOMATICKÁ UDÁLOST DO FEEDU PRO UPDATE ---
+        // --- AUTOMATICKÁ UDÁLOST DO FEEDU ---
         try {
             const feedUuid = uuidv4();
             const feedContent = `Kvíz aktualizován: ${title}`;
 
-            // 1. Zápis do DB feedu
-            await pool.execute(
-                "INSERT INTO feed_events (uuid, course_id, type, content, author, created_at, updated_at) VALUES (?, ?, ?, ?, ?, NOW(), NOW())",
-                [feedUuid, 
-                 (await pool.execute("SELECT course_id FROM quizzes WHERE uuid = ?", [quizId]) as any)[0][0].course_id,
-                 "system", feedContent, null]
-            );
+            const [courseRows] = await pool.execute("SELECT course_id FROM quizzes WHERE uuid = ?", [quizId]);
+            const courseIntId = (courseRows as any)[0]?.course_id;
 
-            // 2. Odeslání přes SSE
-            broadcastToCourse(courseId, {
-                uuid: feedUuid,
-                type: "system",
-                message: feedContent,
-                createdAt: new Date(),
-                isEdited: false
-            });
+            if (courseIntId) {
+                 await pool.execute(
+                    "INSERT INTO feed_events (uuid, course_id, type, content, author, created_at, updated_at) VALUES (?, ?, ?, ?, ?, NOW(), NOW())",
+                    [feedUuid, courseIntId, "system", feedContent, null]
+                );
+
+                broadcastToCourse(courseId, {
+                    uuid: feedUuid,
+                    type: "system",
+                    message: feedContent,
+                    createdAt: new Date(),
+                    isEdited: false
+                });
+            }
         } catch (feedError) {
             console.error("[DEBUG-QUIZ] Nepodařilo se zapsat aktualizaci do feedu:", feedError);
         }
-        // ---------------------------------------------------------------
 
         res.status(200).json({ 
             uuid: quizId, 
@@ -376,7 +370,6 @@ quizzesRouter.put("/:quizId", async (req: Request, res: Response) => {
 quizzesRouter.delete("/:quizId", async (req: Request, res: Response) => {
     const { quizId, courseId } = req.params;
     try {
-        // 1. Zjistíme název kvízu PŘED smazáním (pro feed)
         const [quizRows] = await pool.execute("SELECT title FROM quizzes WHERE uuid = ?", [quizId]);
         if ((quizRows as any[]).length === 0) {
             res.status(404).json({ error: "Quiz not found" });
@@ -384,7 +377,6 @@ quizzesRouter.delete("/:quizId", async (req: Request, res: Response) => {
         }
         const quizTitle = (quizRows as any[])[0].title;
 
-        // 2. Smažeme kvíz
         const [result] = await pool.execute("DELETE FROM quizzes WHERE uuid = ?", [quizId]);
         
         if ((result as any).affectedRows === 0) {
@@ -392,12 +384,11 @@ quizzesRouter.delete("/:quizId", async (req: Request, res: Response) => {
              return;
         }
 
-        // --- PŘIDÁNO: AUTOMATICKÁ UDÁLOST DO FEEDU PRO DELETE ---
+        // --- AUTOMATICKÁ UDÁLOST DO FEEDU ---
         try {
             const feedUuid = uuidv4();
             const feedContent = `Kvíz smazán: ${quizTitle}`;
 
-            // 1. Zápis do DB feedu
             const [courseRows] = await pool.execute("SELECT id FROM courses WHERE uuid = ?", [courseId]);
             if ((courseRows as any[]).length > 0) {
                 const courseIntId = (courseRows as any[])[0].id;
@@ -407,7 +398,6 @@ quizzesRouter.delete("/:quizId", async (req: Request, res: Response) => {
                     [feedUuid, courseIntId, "system", feedContent, null]
                 );
 
-                // 2. Odeslání přes SSE
                 broadcastToCourse(courseId, {
                     uuid: feedUuid,
                     type: "system",
@@ -419,7 +409,6 @@ quizzesRouter.delete("/:quizId", async (req: Request, res: Response) => {
         } catch (feedError) {
             console.error("[DEBUG-QUIZ] Nepodařilo se zapsat mazání do feedu:", feedError);
         }
-        // ---------------------------------------------------------------
 
         res.status(204).send();
     } catch (error) {

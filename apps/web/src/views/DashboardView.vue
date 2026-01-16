@@ -118,7 +118,6 @@ interface Course {
   materials?: any[];
 }
 
-// --- OPRAVA: ZMĚNA NA '/api' ---
 const apiUrl = import.meta.env.VITE_API_URL || '/api';
 
 const categories = ["Programování", "Design & Art", "Marketing", "Soft Skills"];
@@ -141,7 +140,6 @@ const fetchCourses = async () => {
   try {
     loading.value = true;
     error.value = "";
-    // ZMĚNA: Použití apiUrl místo /api
     const response = await fetch(`${apiUrl}/courses`);
     if (!response.ok) throw new Error("Failed to fetch courses");
     const data = await response.json();
@@ -151,7 +149,7 @@ const fetchCourses = async () => {
       difficulty:
         course.difficulty || ["Začátečník", "Pokročilý", "Expert"][index % 3],
       color: ["#91F5AD", "#0070BB", "#FF6B6B", "#FFD93D"][index % 4],
-      category: course.category || "Programování", // Použít DB hodnotu nebo výchozí
+      category: course.category || "Programování",
     }));
   } catch (err) {
     error.value =
@@ -163,41 +161,85 @@ const fetchCourses = async () => {
 };
 
 const openModal = (course?: Course) => {
-  // DEEP CLONE kurzu aby se zabránilo mutaci originálního objektu
   editingCourse.value = course ? JSON.parse(JSON.stringify(course)) : null;
-  console.log("[Dashboard] openModal called, course=", course?.name, "setting showModal=true");
+  console.log("[Dashboard] openModal called, course=", course?.name);
   showModal.value = true;
 };
 
+// --- NOVÁ FUNKCE: Uložení materiálu zvlášť (POST) ---
+const saveMaterialSeparately = async (courseId: string, material: any) => {
+  try {
+    console.log(`[Dashboard] Nahrávám materiál: ${material.value} (${material.type})`);
+    
+    const formData = new FormData();
+    // API očekává: name, type, description a (file nebo url)
+    formData.append('name', material.value); 
+    formData.append('type', material.type);
+    formData.append('description', ''); 
+
+    if (material.type === 'file') {
+       if (!material.file) {
+           console.warn(`[Dashboard] Materiál '${material.value}' nemá soubor, přeskakuji.`);
+           return;
+       }
+       formData.append('file', material.file);
+    } else if (material.type === 'url') {
+       formData.append('url', material.value);
+    }
+
+    const response = await fetch(`${apiUrl}/courses/${courseId}/materials`, {
+      method: 'POST',
+      body: formData, // Browser automaticky nastaví multipart/form-data
+    });
+
+    if (!response.ok) {
+        const errText = await response.text();
+        throw new Error(`Chyba nahrávání (${response.status}): ${errText}`);
+    }
+    console.log(`[Dashboard] Materiál '${material.value}' úspěšně nahrán.`);
+
+  } catch (err) {
+    console.error(`[Dashboard] Chyba saveMaterialSeparately:`, err);
+    alert(`Nepodařilo se nahrát materiál: ${material.value}`);
+  }
+};
+
+// --- UPRAVENÁ FUNKCE: Uložení kurzu + materiálů + kvízů ---
 const saveCourse = async (courseData: Course, isEditing: boolean) => {
   try {
-    // 1. EXTRAKCE VŠECH KVÍZŮ (i nových, i existujících)
-    // Protože CourseModal nyní míchá kvízy do materiálů, musíme je všechny vytáhnout
     const quizzesToSave: any[] = [];
-    
-    // Filtrování materiálů - ponecháme jen ty, co NEJSOU kvíz
+    const materialsToSave: any[] = [];
+
+    // 1. TŘÍDĚNÍ MATERIÁLŮ (Co je kvíz? Co je nový soubor? Co už existuje?)
     const cleanMaterials = (courseData.materials || []).filter((mat: any) => {
-      // Pokud je to kvíz
+      // A) Kvíz - dáme stranou
       if (typeof mat === 'object' && mat.type === 'quiz') {
-        // Pokud má 'data', je to validní kvíz z modalu.
         if (mat.data) {
            quizzesToSave.push({
                ...mat.data,
-               uuid: mat.uuid || mat.data.uuid // Ensure UUID is carried over if existing
+               uuid: mat.uuid || mat.data.uuid
            });
         }
-        return false; // Skrýt před uložením kurzu
+        return false; 
       }
-      return true; // Klasický materiál
+      
+      // B) Nový materiál (nemá UUID) - dáme stranou na POST
+      if (!mat.uuid) {
+         materialsToSave.push(mat);
+         return false; // Neposílat v JSONu kurzu, server by to stejně ignoroval
+      }
+
+      // C) Existující materiál - necháme (backend ho ignoruje při PUT, ale nevadí)
+      return true;
     });
 
-    // Vytvoříme kopii dat kurzu bez kvízů v materials
+    // Data pro uložení kurzu (bez nových materiálů a kvízů)
     const payloadCourse = {
       ...courseData,
       materials: cleanMaterials
     };
 
-    // 2. ULOŽENÍ KURZU (SCENÁŘ A i B)
+    // 2. ULOŽENÍ SAMOTNÉHO KURZU
     const url = isEditing && courseData.uuid 
       ? `${apiUrl}/courses/${courseData.uuid}` 
       : `${apiUrl}/courses`;
@@ -221,25 +263,31 @@ const saveCourse = async (courseData: Course, isEditing: boolean) => {
     const finalCourseId = isEditing && courseData.uuid ? courseData.uuid : savedCourse.uuid;
 
     if (!finalCourseId) {
-       console.warn("Nepodařilo se získat ID kurzu, kvízy nebudou uloženy.");
-    } else if (quizzesToSave.length > 0) {
-       // 3. ULOŽENÍ/AKTUALIZACE KVÍZŮ
-       console.log(`[Dashboard] Zpracovávám ${quizzesToSave.length} kvízů pro kurz ${finalCourseId}`);
-       
-       for (const quiz of quizzesToSave) {
-          await saveQuizSeparately(finalCourseId, quiz);
+       console.warn("Nepodařilo se získat ID kurzu, materiály nebudou uloženy.");
+    } else {
+       // 3. ULOŽENÍ NOVÝCH MATERIÁLŮ (POST)
+       if (materialsToSave.length > 0) {
+           console.log(`[Dashboard] Zpracovávám ${materialsToSave.length} nových materiálů...`);
+           for (const mat of materialsToSave) {
+               await saveMaterialSeparately(finalCourseId, mat);
+           }
+       }
+
+       // 4. ULOŽENÍ KVÍZŮ
+       if (quizzesToSave.length > 0) {
+           console.log(`[Dashboard] Zpracovávám ${quizzesToSave.length} kvízů...`);
+           for (const quiz of quizzesToSave) {
+              await saveQuizSeparately(finalCourseId, quiz);
+           }
        }
     }
 
     await fetchCourses(); 
-    console.log("[Dashboard] fetchCourses done, closing modal");
     showModal.value = false;
     editingCourse.value = null;
     
-    // Malá pauza aby se stihlo zavření modalu a resetování formuláře
     await new Promise(resolve => setTimeout(resolve, 150));
-    
-    alert(isEditing ? "Kurz a kvízy byly uloženy." : "Nový kurz a kvízy byly vytvořeny.");
+    alert(isEditing ? "Kurz uložen." : "Kurz vytvořen.");
 
   } catch (err) {
     const msg = err instanceof Error ? err.message : "Neznámá chyba";
@@ -248,31 +296,36 @@ const saveCourse = async (courseData: Course, isEditing: boolean) => {
   }
 };
 
-// Pomocná funkce pro uložení jednoho kvízu
+// apps/web/src/views/DashboardView.vue
+
 const saveQuizSeparately = async (courseId: string, quizData: any) => {
     try {
-        // Transformace dat kvízu (Frontend formát -> Backend formát)
         const backendQuestions = quizData.questions.map((q: any, i: number) => {
             let correctIndex = undefined;
             let correctIndices = undefined;
 
-            if (!q.options) throw new Error(`Otázka č. ${i+1} nemá možnosti.`);
+            // Kontrola, zda existuje pole možností
+            if (!q.options || !Array.isArray(q.options)) {
+                throw new Error(`Otázka č. ${i+1} nemá platné možnosti.`);
+            }
 
             if (q.type === 'single') {
-               // Frontend: 'single', Backend: 'singleChoice'
-               correctIndex = q.options.findIndex((opt: any) => opt.isCorrect);
+               // OPRAVA: Přidána kontrola "opt &&", aby kód nespadl na null
+               correctIndex = q.options.findIndex((opt: any) => opt && opt.isCorrect);
                if (correctIndex === -1) correctIndex = 0; 
             } else {
-               // Frontend: 'multiple', Backend: 'multipleChoice'
+               // OPRAVA: Přidána kontrola "opt &&"
                correctIndices = q.options
-                 .map((opt: any, idx: number) => opt.isCorrect ? idx : -1)
+                 .map((opt: any, idx: number) => (opt && opt.isCorrect) ? idx : -1)
                  .filter((idx: number) => idx !== -1);
             }
 
             return {
+              uuid: q.uuid, 
               type: q.type === 'single' ? 'singleChoice' : 'multipleChoice',
-              question: q.text,
-              options: q.options.map((opt: any) => opt.text),
+              question: q.text || "", 
+              // OPRAVA: Ošetření null možností i při převodu na text
+              options: q.options.map((opt: any) => opt ? (opt.text || "") : ""),
               correctIndex,
               correctIndices
             };
@@ -285,17 +338,15 @@ const saveQuizSeparately = async (courseId: string, quizData: any) => {
         
         let quizUrl, method;
         if (quizData.uuid) {
-            // Edit existing quiz
             quizUrl = `${apiUrl}/courses/${courseId}/quizzes/${quizData.uuid}`;
             method = 'PUT';
         } else {
-            // Create new quiz
             quizUrl = `${apiUrl}/courses/${courseId}/quizzes`;
             method = 'POST';
         }
-
-        console.log(`[Dashboard] ${method} kvíz '${quizData.title}' na ${quizUrl}`);
         
+        console.log(`[Dashboard] Odesílám kvíz:`, payload);
+
         const res = await fetch(quizUrl, {
             method: method,
             headers: { 'Content-Type': 'application/json' },
@@ -308,7 +359,6 @@ const saveQuizSeparately = async (courseId: string, quizData: any) => {
         }
     } catch (e: any) {
         console.error(`Chyba při ukládání kvízu '${quizData.title}':`, e);
-        // Můžeme vyhodit chybu dál, nebo jen zalogovat a pokračovat
         throw e; 
     }
 };
@@ -322,7 +372,6 @@ const deleteCourse = async (uuid?: string) => {
 const confirmDelete = async () => {
   if (courseToDeleteId.value) {
     try {
-      // ZMĚNA: Použití apiUrl
       const response = await fetch(`${apiUrl}/courses/${courseToDeleteId.value}`, {
         method: "DELETE",
       });
