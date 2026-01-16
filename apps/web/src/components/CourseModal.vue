@@ -381,13 +381,35 @@ const close = () => {
 };
 
 // --- API PRO KVÍZY (OPRAVENO: PŘEKLAD DAT PRO EDITOR) ---
-const openQuizModal = (index: number | null = null) => {
+const openQuizModal = async (index: number | null = null) => {
   editingQuizIndex.value = index;
   
   if (index !== null && formData.value.materials) {
       const mat = formData.value.materials[index];
+      
+      // 1. POKUD MÁ KVÍZ UUID (JE UŽ ULOŽENÝ), STÁHNEME DETAIL ZE SERVERU
+      if (mat && mat.type === 'quiz' && mat.uuid && formData.value.uuid) {
+          try {
+             console.log(`[CourseModal] Fetching quiz details: ${mat.uuid}`);
+             // Tady je ten chybějící GET request:
+             const res = await fetch(`${apiUrl}/courses/${formData.value.uuid}/quizzes/${mat.uuid}`);
+             
+             if (res.ok) {
+                 const detailedQuiz = await res.json();
+                 console.log("[CourseModal] Quiz details loaded:", detailedQuiz.questions?.length);
+                 // Uložíme čerstvá data do materiálu
+                 mat.data = detailedQuiz; 
+             } else {
+                 console.error("[CourseModal] Failed to load quiz details");
+             }
+          } catch (e) {
+             console.error("[CourseModal] Error fetching quiz:", e);
+          }
+      }
+
+      // 2. PŘÍPRAVA DAT PRO EDITOR (MAPPING)
       if (mat && mat.type === 'quiz' && mat.data) {
-          // HLAVNÍ OPRAVA: Mapování backend dat na frontend strukturu
+          // Deep copy aby se neupravovalo přímo
           const rawData = JSON.parse(JSON.stringify(mat.data));
           
           if (rawData.questions) {
@@ -395,7 +417,7 @@ const openQuizModal = (index: number | null = null) => {
                 // Pokud už to vypadá jako frontend data, nechat být
                 if (q.options && typeof q.options[0] === 'object') return q;
 
-                // Jinak přeformátovat
+                // Jinak přeformátovat z DB formátu do Editor formátu
                 return {
                     uuid: q.uuid,
                     text: q.question || q.text,
@@ -411,6 +433,7 @@ const openQuizModal = (index: number | null = null) => {
           }
           currentQuizData.value = rawData;
       } else {
+          // Fallback pro nový prázdný kvíz
           currentQuizData.value = null;
       }
   } else {
