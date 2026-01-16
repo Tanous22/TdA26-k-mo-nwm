@@ -106,6 +106,7 @@
 import { ref, onMounted } from "vue";
 import CourseModal from "../components/CourseModal.vue";
 import ConfirmationModal from "../components/ConfirmationModal.vue";
+import { useNotifications } from "../composables/useNotifications";
 interface Course {
   uuid?: string;
   name: string;
@@ -116,6 +117,7 @@ interface Course {
   materials?: any[];
 }
 const apiUrl = import.meta.env.VITE_API_URL || '/api';
+const { success: showSuccess, error: showError } = useNotifications();
 const categories = ["Programování", "Design & Art", "Marketing", "Soft Skills"];
 const courses = ref<Course[]>([]);
 const showModal = ref(false);
@@ -192,7 +194,7 @@ const saveMaterialSeparately = async (courseId: string, material: any) => {
     console.log(`[Dashboard] Materiál '${material.value}' úspěšně nahrán.`);
   } catch (err) {
     console.error(`[Dashboard] Chyba saveMaterialSeparately:`, err);
-    alert(`Nepodařilo se nahrát materiál: ${material.value}`);
+    showError(`Nepodařilo se nahrát materiál: ${material.value}`);
   }
 };
 const saveCourse = async (courseData: Course, isEditing: boolean) => {
@@ -256,10 +258,11 @@ const saveCourse = async (courseData: Course, isEditing: boolean) => {
     editingCourse.value = null;
     await fetchCourses();
     await new Promise(resolve => setTimeout(resolve, 50));
-    alert(isEditing ? "Kurz uložen." : "Kurz vytvořen.");
-  } catch (err) {
-    const msg = err instanceof Error ? err.message : "Neznámá chyba";
-    alert(`Chyba při ukládání: ${msg}`);
+    showSuccess(isEditing ? "Kurz uložen" : "Kurz vytvořen");
+    await fetchCourses();
+  } catch (err: any) {
+    const msg = err?.response?.data?.error || err.message || "Neznámá chyba";
+    showError(`Chyba při ukládání: ${msg}`);
     console.error("Error saving course sequence:", err);
   }
 };
@@ -329,7 +332,7 @@ const confirmDelete = async () => {
       if (!response.ok) throw new Error("Failed to delete course");
       await fetchCourses(); 
     } catch (err) {
-      alert(err instanceof Error ? err.message : "Chyba při mazání kurzu");
+      showError(err instanceof Error ? err.message : "Chyba při mazání kurzu");
       console.error("Error deleting course:", err);
     }
   }

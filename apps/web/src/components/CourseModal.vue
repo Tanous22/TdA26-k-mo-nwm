@@ -358,10 +358,9 @@ const removeMaterial = async (index: number) => {
               method: 'DELETE'
           });
           if (!response.ok) throw new Error("Chyba při mazání na serveru.");
-          alert("Materiál byl smazán.");
+          console.log("[CourseModal] Materiál byl smazán.");
       } catch (e) {
-          console.error("Chyba DELETE material:", e);
-          alert("Nepodařilo se smazat materiál ze serveru.");
+          console.error("[CourseModal] Nepodařilo se smazat materiál ze serveru:", e);
           return; 
       }
   }
@@ -374,10 +373,9 @@ const confirmQuizDelete = async () => {
   if (material.uuid && isEditing.value && formData.value.uuid) {
     try {
       await fetch(`${apiUrl}/courses/${formData.value.uuid}/quizzes/${material.uuid}`, { method: 'DELETE' });
-      alert("✅ Kvíz smazán!");
-    } catch (e) {
-      console.error(e);
-      alert("❌ Chyba mazání kvízu");
+      console.log("[CourseModal] Kvíz smazán!");
+    } catch (err) {
+      console.error("[CourseModal] Chyba mazání kvízu:", err);
       return; 
     }
   }
@@ -443,7 +441,6 @@ const openQuizModal = async (index: number | null = null) => {
       showQuizModal.value = true;
   } catch (err) {
       console.error("[CourseModal] Error in openQuizModal:", err);
-      alert("Chyba při otevírání kvízu. Zkontrolujte konzoli.");
   }
 };
 const handleQuizSave = (quiz: any) => {
