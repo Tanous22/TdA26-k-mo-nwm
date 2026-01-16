@@ -244,25 +244,35 @@ const formData = ref<Course>(defaultFormState());
 const initForm = async () => {
   try {
       console.log("[CourseModal] initForm start");
-      // 1. Schováme formulář
       isFormReady.value = false;
       await nextTick(); 
       
       if (props.course) {
           isEditing.value = true;
-          // Deep clone
           const safeCourse = JSON.parse(JSON.stringify(props.course));
           
-          const mergedMaterials = safeCourse.materials || [];
+          // 1. EXPLICITNÍ SANITIZACE: Okamžité odstranění null/undefined položek
+          // Používáme filter((i: any) => i) pro odstranění falsy hodnot (vč. null)
+          // Zároveň ověříme, zda je to pole, jinak použijeme prázdné pole.
+          const sanitizedMaterials = Array.isArray(safeCourse.materials) 
+              ? safeCourse.materials.filter((m: any) => m) 
+              : [];
+
+          const sanitizedQuizzes = Array.isArray(safeCourse.quizzes)
+              ? safeCourse.quizzes.filter((q: any) => q)
+              : [];
+
+          // Pracujeme už jen s čistými poli (místo původního mergedMaterials = safeCourse.materials || [])
+          const mergedMaterials = [...sanitizedMaterials];
           
-          // Pokud kurz má kvízy, přidáme je do materiálů (pokud tam už nejsou)
-          if (safeCourse.quizzes && safeCourse.quizzes.length > 0) {
-              safeCourse.quizzes.forEach((q: any) => {
-                  if (!q) return; // Pojistka
+          // Pokud kurz má kvízy, přidáme je do materiálů
+          if (sanitizedQuizzes.length > 0) {
+              sanitizedQuizzes.forEach((q: any) => {
+                  // Zde už je 'q' garantováno, že není null
                   
-                  // ZMĚNA: Kontrola m && m.type, aby to nespadlo na null
+                  // Bezpečnější check existence
                   const exists = mergedMaterials.some((m: any) => 
-                      m && m.type === 'quiz' && (m.uuid === q.uuid || (m.data && m.data.uuid === q.uuid))
+                      m.type === 'quiz' && (m.uuid === q.uuid || (m.data && m.data.uuid === q.uuid))
                   );
                   
                   if (!exists) {
@@ -276,33 +286,31 @@ const initForm = async () => {
               });
           }
 
-          // Vyčištění null materiálů
-          const cleanMaterials = mergedMaterials.filter((m: any) => m !== null && m !== undefined);
-
           formData.value = {
             uuid: safeCourse.uuid,
             name: safeCourse.name || "",
             description: safeCourse.description || "",
             category: safeCourse.category || "Programování",
             difficulty: safeCourse.difficulty || "Začátečník",
-            materials: cleanMaterials
+            materials: mergedMaterials // Zde už jsou pouze validní objekty
           };
       } else {
           isEditing.value = false;
           formData.value = defaultFormState();
       }
       
+      // ... zbytek funkce (reset inputů) zůstává stejný ...
       newMaterialInput.value = "";
       urlError.value = null;
       tempFile.value = null;
       materialType.value = "url";
 
   } catch (error) {
+      // ... catch blok ...
       console.error("[CourseModal] CRITICAL ERROR IN initForm:", error);
-      // Fallback - inicializujeme prázdný formulář, aby se UI nezaseklo
       formData.value = defaultFormState();
   } finally {
-      // 2. Vždy zobrazíme formulář
+      // ... finally blok ...
       await nextTick();
       isFormReady.value = true;
       console.log("[CourseModal] initForm done, isFormReady=true");
