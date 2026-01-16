@@ -282,11 +282,20 @@ const saveCourse = async (courseData: Course, isEditing: boolean) => {
        }
     }
 
-    await fetchCourses(); 
+    // Close modal first to prevent state conflicts
     showModal.value = false;
+    
+    // Wait for modal to fully close
+    await new Promise(resolve => setTimeout(resolve, 100));
+    
+    // Reset editing state
     editingCourse.value = null;
     
-    await new Promise(resolve => setTimeout(resolve, 150));
+    // Refetch fresh data
+    await fetchCourses();
+    
+    // Small delay before alert to ensure UI updates
+    await new Promise(resolve => setTimeout(resolve, 50));
     alert(isEditing ? "Kurz uložen." : "Kurz vytvořen.");
 
   } catch (err) {

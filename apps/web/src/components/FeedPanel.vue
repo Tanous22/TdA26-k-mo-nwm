@@ -32,7 +32,7 @@
       Zatím žádné zprávy. Buď první!
     </div>
 
-    <div v-else class="space-y-4">
+    <div v-else class="space-y-4 max-h-[400px] overflow-y-auto pr-2">
       <div
         v-for="msg in feedMessages"
         :key="msg.uuid"

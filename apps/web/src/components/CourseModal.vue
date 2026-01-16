@@ -243,7 +243,7 @@ const formData = ref<Course>(defaultFormState());
 // ZMĚNA: Robustní inicializace v try-catch-finally
 const initForm = async () => {
   try {
-      console.log("[CourseModal] initForm start");
+      console.log("[CourseModal] initForm start, props.course=", props.course?.name);
       // 1. Schováme formulář pro čistý start
       isFormReady.value = false;
       await nextTick(); 
@@ -317,11 +317,12 @@ const initForm = async () => {
 
   } catch (error) {
       console.error("[CourseModal] CRITICAL ERROR IN initForm:", error);
+      console.error("[CourseModal] props.course at time of error:", props.course);
       formData.value = defaultFormState();
   } finally {
       await nextTick();
       isFormReady.value = true;
-      console.log("[CourseModal] initForm done, isFormReady=true");
+      console.log("[CourseModal] initForm done, isFormReady=true, formData.name=", formData.value.name);
   }
 };
 
