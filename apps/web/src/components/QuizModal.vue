@@ -2,7 +2,7 @@
   <Teleport to="body">
     <div v-if="show" class="modal-overlay" @click.self="close">
       <div
-        class="organic-box bg-white p-8 max-w-2xl w-full relative animate-bounce-in max-h-[90vh] overflow-y-auto"
+        class="organic-box bg-white p-4 md:p-8 max-w-2xl w-full mx-4 md:mx-0 relative animate-bounce-in max-h-[90vh] overflow-y-auto"
       >
         <button
           @click="close"
