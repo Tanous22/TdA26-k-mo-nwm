@@ -163,7 +163,8 @@ const fetchCourses = async () => {
 };
 
 const openModal = (course?: Course) => {
-  editingCourse.value = course || null;
+  // DEEP CLONE kurzu aby se zabránilo mutaci originálního objektu
+  editingCourse.value = course ? JSON.parse(JSON.stringify(course)) : null;
   showModal.value = true;
 };
 

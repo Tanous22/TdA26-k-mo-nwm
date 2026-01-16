@@ -190,6 +190,9 @@ import { ref, reactive, watch, nextTick } from "vue";
 import QuizModal from "./QuizModal.vue";
 import ConfirmationModal from "./ConfirmationModal.vue";
 
+// API URL for backend calls
+const apiUrl = import.meta.env.VITE_API_URL || '/api';
+
 interface Material {
   type: "url" | "file" | "quiz";
   value: string;
@@ -323,8 +326,13 @@ watch(
   () => props.show,
   (isOpen) => {
     if (isOpen) {
+      console.log("[CourseModal] Modal opening, initializing form...");
       modalKey.value++; // FORCE RE-RENDER of content
       initForm();
+    } else {
+      // KRITICKÉ: Resetovat form když se modal zavírá
+      console.log("[CourseModal] Modal closing, resetting form...");
+      resetForm();
     }
   },
   { immediate: true }
@@ -388,11 +396,47 @@ const removeMaterial = (index: number) => {
   }
 };
 
-const confirmQuizDelete = () => {
-  if (quizIndexToDelete.value !== null) {
-    console.log(`[CourseModal] Deleting quiz at index ${quizIndexToDelete.value}`);
-    formData.materials!.splice(quizIndexToDelete.value, 1);
+const confirmQuizDelete = async () => {
+  if (quizIndexToDelete.value === null) return;
+  
+  const material = formData.materials![quizIndexToDelete.value];
+  if (!material) return;
+  
+  const quizUuid = material.uuid || material.data?.uuid;
+  
+  console.log(`[CourseModal] Deleting quiz at index ${quizIndexToDelete.value}, UUID: ${quizUuid}`);
+  
+  // Pokud je to EXISTUJÍCÍ kvíz (má UUID) A editujeme EXISTUJÍCÍ kurz
+  if (quizUuid && isEditing.value && formData.uuid) {
+    try {
+      const deleteUrl = `${apiUrl}/courses/${formData.uuid}/quizzes/${quizUuid}`;
+      console.log(`[CourseModal] Calling DELETE: ${deleteUrl}`);
+      
+      const res = await fetch(deleteUrl, { method: 'DELETE' });
+      
+      if (!res.ok) {
+        const errorText = await res.text();
+        throw new Error(`Server error ${res.status}: ${errorText}`);
+      }
+      
+      console.log(`[CourseModal] Quiz deleted from server successfully`);
+      alert("✅ Kvíz byl smazán z databáze!");
+      
+    } catch (e) {
+      const errorMsg = e instanceof Error ? e.message : "Neznámá chyba";
+      console.error("[CourseModal] Failed to delete quiz from server:", e);
+      alert(`❌ Chyba při mazání kvízu: ${errorMsg}`);
+      showQuizDeleteModal.value = false;
+      quizIndexToDelete.value = null;
+      return; // Don't proceed with local delete if server failed
+    }
+  } else {
+    console.log(`[CourseModal] Quiz is new or course is new - only local delete`);
   }
+  
+  // Smazat lokálně ze state (always)
+  formData.materials!.splice(quizIndexToDelete.value, 1);
+  
   showQuizDeleteModal.value = false;
   quizIndexToDelete.value = null;
 };
