@@ -15,7 +15,6 @@
       </div>
       Think Different Academy
     </router-link>
-
     <nav class="hidden md:flex gap-8 items-center">
       <router-link to="/" :class="navLinkClass('home')"> Domů </router-link>
       <router-link to="/courses" :class="navLinkClass('courses')">
@@ -29,7 +28,6 @@
         Dashboard
       </router-link>
     </nav>
-
     <div class="flex gap-4 items-center">
       <span v-if="user" class="text-sm text-gray-600 font-semibold">
         {{ user.name }}
@@ -54,15 +52,12 @@
     </div>
   </header>
 </template>
-
 <script setup lang="ts">
 import { useRoute, useRouter } from "vue-router";
 import { useAuth } from "../composables/useAuth";
-
 const route = useRoute();
 const router = useRouter();
 const { user, isTeacher, logout: authLogout } = useAuth();
-
 const navLinkClass = (viewName: string) => {
   const base =
     "font-bold text-lg uppercase tracking-wide transition-colors decoration-2 underline-offset-4 no-underline";
@@ -70,15 +65,12 @@ const navLinkClass = (viewName: string) => {
   if (isActive) return `${base} text-[#0070BB] underline`;
   return `${base} text-[#1A1A1A] hover:text-[#0070BB]`;
 };
-
 const logout = async () => {
   await authLogout();
   router.push("/login");
 };
 </script>
-
 <style scoped>
 .router-link-active {
-  /* handled by navLinkClass */
 }
 </style>

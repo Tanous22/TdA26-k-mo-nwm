@@ -11,11 +11,9 @@
         >
           &times;
         </button>
-
         <h2 class="text-2xl font-extrabold mb-6 text-[#0070BB]">
           {{ isEditing ? "Upravit kurz" : "Vytvořit nový kurz" }}
         </h2>
-
         <form v-if="isFormReady" @submit.prevent="saveCourse" class="space-y-4">
           <div>
             <label class="block font-bold mb-1 text-sm">Název kurzu</label>
@@ -27,7 +25,6 @@
               placeholder="Např. Advanced CSS"
             />
           </div>
-
           <div class="grid grid-cols-2 gap-4">
             <div>
               <label class="block font-bold mb-1 text-sm">Kategorie</label>
@@ -53,7 +50,6 @@
               </select>
             </div>
           </div>
-
           <div>
             <label class="block font-bold mb-1 text-sm">Popis</label>
             <textarea
@@ -64,13 +60,11 @@
               placeholder="O čem kurz bude..."
             ></textarea>
           </div>
-
           <div class="border-t-2 border-dashed border-gray-200 pt-4 mt-4">
             <label
               class="block font-bold mb-4 text-xl text-[#0257A5] text-center"
               >Správa materiálů</label
             >
-
             <div class="flex gap-4 mb-6 text-sm font-bold justify-center">
               <button type="button" @click="materialType = 'url'" 
                 class="flex items-center gap-2 px-3 py-2 rounded-lg transition-transform hover:scale-105"
@@ -88,7 +82,6 @@
                 <img src="@/assets/icons/quiz.svg" class="w-6 h-6" alt="Quiz" /> Kvízy
               </button>
             </div>
-
             <div v-if="materialType === 'quiz'">
                 <h4 class="font-bold text-gray-700 mb-2">Správa Kvízů:</h4>
                 <ul class="space-y-2 mb-3">
@@ -111,7 +104,6 @@
                    + Vytvořit nový kvíz
                 </button>
             </div>
-
             <div v-else>
                 <ul v-if="formData.materials && formData.materials.length > 0" class="space-y-2 mb-3">
                   <template v-for="(mat, index) in formData.materials" :key="index">
@@ -119,7 +111,6 @@
                         <div class="flex items-center gap-2 overflow-hidden">
                            <img v-if="typeof mat === 'object' && mat.type === 'file'" src="@/assets/icons/file.svg" class="w-5 h-5" alt="File" />
                            <img v-else src="@/assets/icons/link.svg" class="w-5 h-5" alt="Link" />
-                           
                            <a v-if="typeof mat === 'object' && mat.type === 'url'" :href="mat.value" target="_blank" class="text-sm font-semibold truncate hover:underline text-[#0070BB]">
                              {{ mat.value }}
                            </a>
@@ -131,7 +122,6 @@
                     </li>
                   </template>
                 </ul>
-
                 <div v-if="materialType === 'url'" class="flex gap-2 items-start">
                   <div class="flex-grow">
                     <input v-model="newMaterialInput" @keydown.enter.prevent="addMaterial" @input="urlError = null" type="url" class="organic-input !py-2 !text-sm w-full" :class="{ '!border-red-500': urlError }" placeholder="https://..." />
@@ -139,7 +129,6 @@
                   </div>
                   <button type="button" @click="addMaterial" class="organic-btn secondary !py-2 !px-4 h-[38px] flex items-center">+</button>
                 </div>
-
                 <div v-else-if="materialType === 'file'" class="relative">
                   <input type="file" @change="handleFileUpload" class="hidden" id="file-upload" />
                   <label for="file-upload" class="border-2 border-dashed border-gray-300 rounded-lg p-8 w-full flex flex-col items-center justify-center cursor-pointer hover:bg-gray-50 transition-colors gap-4">
@@ -149,26 +138,22 @@
                 </div>
             </div>
           </div>
-
           <div class="pt-4">
             <button type="submit" class="organic-btn w-full text-lg py-3">
               {{ isEditing ? "Uložit změny" : "Vytvořit kurz" }}
             </button>
           </div>
         </form>
-        
         <div v-else class="text-center py-10 text-gray-500 font-bold">
            Načítání editoru... (Pokud toto vidíte dlouho, nastala chyba v datech kurzu)
         </div>
       </div>
-
       <ConfirmationModal
         :show="showQuizDeleteModal"
         title="Opravdu chcete smazat tento kvíz?"
         @confirm="confirmQuizDelete"
         @cancel="showQuizDeleteModal = false"
       />
-
       <QuizModal
         :show="showQuizModal"
         :edit-mode="editingQuizIndex !== null"
@@ -179,14 +164,11 @@
     </div>
   </Teleport>
 </template>
-
 <script setup lang="ts">
 import { ref, watch, nextTick } from "vue";
 import QuizModal from "./QuizModal.vue";
 import ConfirmationModal from "./ConfirmationModal.vue";
-
 const apiUrl = import.meta.env.VITE_API_URL || '/api';
-
 interface Material {
   type: "url" | "file" | "quiz";
   value: string;
@@ -194,7 +176,6 @@ interface Material {
   data?: any; 
   uuid?: string; 
 }
-
 interface Course {
   uuid?: string;
   name: string;
@@ -204,33 +185,27 @@ interface Course {
   materials?: Material[];
   quizzes?: any[];
 }
-
 const props = defineProps<{
   show: boolean;
   course?: Course | null;
   categories: string[];
 }>();
-
 const emit = defineEmits<{
   close: [];
   save: [course: Course, isEditing: boolean];
 }>();
-
 const isFormReady = ref(false);
 const isEditing = ref(false);
 const materialType = ref<"url" | "file" | "quiz">("url");
 const newMaterialInput = ref("");
 const urlError = ref<string | null>(null);
 const tempFile = ref<File | null>(null);
-
 const showQuizModal = ref(false);
 const editingQuizIndex = ref<number | null>(null);
 const currentQuizData = ref<any>(null);
-
 const showQuizDeleteModal = ref(false);
 const quizIndexToDelete = ref<number | null>(null);
 const modalKey = ref(0);
-
 const defaultFormState = (): Course => ({
   name: "",
   description: "",
@@ -238,54 +213,38 @@ const defaultFormState = (): Course => ({
   difficulty: "Jednoduchý",
   materials: [],
 });
-
 const formData = ref<Course>(defaultFormState());
-
-// ZMĚNA: Robustní inicializace v try-catch-finally
 const initForm = async () => {
   try {
       console.log("[CourseModal] initForm start, props.course=", props.course?.name);
-      // 1. Schováme formulář pro čistý start
       isFormReady.value = false;
       await nextTick(); 
-      
       if (props.course) {
           isEditing.value = true;
           const safeCourse = JSON.parse(JSON.stringify(props.course));
-          
-          // 2. SANITIZACE A MAPOVÁNÍ (OPRAVA NÁZVŮ)
-          // Backend vrací 'name' nebo 'url', ale frontend chce 'value'. Zde to propojíme.
           const sanitizedMaterials = Array.isArray(safeCourse.materials) 
               ? safeCourse.materials
                   .filter((m: any) => m) // Odstraníme null
                   .map((m: any) => {
-                      // Pokud objekt nemá 'value', vytvoříme ji z dostupných dat
                       if (!m.value) {
                           if (m.type === 'url') {
-                              // U odkazů chceme jako hodnotu URL adresu
                               m.value = m.url || m.content || m.name || "";
                           } else {
-                              // U souborů a ostatních chceme jméno
                               m.value = m.name || m.title || "Materiál bez názvu";
                           }
                       }
                       return m;
                   })
               : [];
-
           const sanitizedQuizzes = Array.isArray(safeCourse.quizzes)
               ? safeCourse.quizzes.filter((q: any) => q)
               : [];
-
           const mergedMaterials = [...sanitizedMaterials];
-          
-          // 3. Sloučení kvízů do materiálů
           if (sanitizedQuizzes.length > 0) {
               sanitizedQuizzes.forEach((q: any) => {
                   const exists = mergedMaterials.some((m: any) => 
                       m.type === 'quiz' && (m.uuid === q.uuid || (m.data && m.data.uuid === q.uuid))
                   );
-                  
                   if (!exists) {
                       mergedMaterials.push({
                           type: 'quiz',
@@ -296,7 +255,6 @@ const initForm = async () => {
                   }
               });
           }
-
           formData.value = {
             uuid: safeCourse.uuid,
             name: safeCourse.name || "",
@@ -309,13 +267,10 @@ const initForm = async () => {
           isEditing.value = false;
           formData.value = defaultFormState();
       }
-      
-      // Reset pomocných proměnných
       newMaterialInput.value = "";
       urlError.value = null;
       tempFile.value = null;
       materialType.value = "url";
-
   } catch (error) {
       console.error("[CourseModal] CRITICAL ERROR IN initForm:", error);
       console.error("[CourseModal] props.course at time of error:", props.course);
@@ -326,7 +281,6 @@ const initForm = async () => {
       console.log("[CourseModal] initForm done, isFormReady=true, formData.name=", formData.value.name);
   }
 };
-
 watch(
   () => props.show,
   async (isOpen) => {
@@ -345,7 +299,6 @@ watch(
   },
   { immediate: true }
 );
-
 const handleFileUpload = (event: Event) => {
   const target = event.target as HTMLInputElement;
   if (target.files && target.files.length > 0) {
@@ -360,12 +313,10 @@ const handleFileUpload = (event: Event) => {
     target.value = "";
   }
 };
-
 const addMaterial = () => {
   if (!formData.value.materials) {
       formData.value.materials = [];
   }
-
   if (materialType.value === "url") {
     const urlValue = newMaterialInput.value.trim();
     if (urlValue) {
@@ -390,22 +341,17 @@ const addMaterial = () => {
     }
   }
 };
-
 const removeMaterial = async (index: number) => {
   if (!formData.value.materials) return;
-  
   const material = formData.value.materials[index];
   if (!material) return;
-
   if (material.type === 'quiz') {
     quizIndexToDelete.value = index;
     showQuizDeleteModal.value = true;
     return;
   }
-  
   if (material.uuid) {
       if(!confirm(`Opravdu chcete smazat materiál "${material.value}"?`)) return;
-      
       try {
           if (!formData.value.uuid) throw new Error("Chybí ID kurzu.");
           const response = await fetch(`${apiUrl}/courses/${formData.value.uuid}/materials/${material.uuid}`, {
@@ -419,16 +365,12 @@ const removeMaterial = async (index: number) => {
           return; 
       }
   }
-
   formData.value.materials.splice(index, 1);
 };
-
 const confirmQuizDelete = async () => {
   if (quizIndexToDelete.value === null || !formData.value.materials) return;
-  
   const material = formData.value.materials[quizIndexToDelete.value];
   if (!material) return;
-  
   if (material.uuid && isEditing.value && formData.value.uuid) {
     try {
       await fetch(`${apiUrl}/courses/${formData.value.uuid}/quizzes/${material.uuid}`, { method: 'DELETE' });
@@ -439,28 +381,21 @@ const confirmQuizDelete = async () => {
       return; 
     }
   }
-  
   formData.value.materials.splice(quizIndexToDelete.value, 1);
   showQuizDeleteModal.value = false;
   quizIndexToDelete.value = null;
 };
-
 const saveCourse = async () => {
   emit("save", { ...formData.value }, isEditing.value);
 };
-
 const close = () => {
   emit("close");
 };
-
-// ZMĚNA: Bezpečnější načítání kvízu
 const openQuizModal = async (index: number | null = null) => {
   try {
       editingQuizIndex.value = index;
-      
       if (index !== null && formData.value.materials) {
           const mat = formData.value.materials[index];
-          
           if (mat && mat.type === 'quiz' && mat.uuid && formData.value.uuid) {
               try {
                  const res = await fetch(`${apiUrl}/courses/${formData.value.uuid}/quizzes/${mat.uuid}`);
@@ -472,24 +407,17 @@ const openQuizModal = async (index: number | null = null) => {
                  console.error("[CourseModal] Error fetching quiz details:", e);
               }
           }
-
           if (mat && mat.type === 'quiz' && mat.data) {
               const rawData = JSON.parse(JSON.stringify(mat.data));
               if (rawData.questions) {
-                 // Bezpečný mapping
                  rawData.questions = rawData.questions.map((q: any) => {
                     if (!q) return null;
-                    
-                    // OPRAVA: Vždy normalizuj text otázky, i když options jsou objekty
                     const questionText = q.question || q.text || "";
                     const questionType = q.type === 'singleChoice' ? 'single' : 'multiple';
-                    
-                    // Pokud jsou options už objekty, zachovej je
                     let options;
                     if (q.options && typeof q.options[0] === 'object') {
                         options = q.options;
                     } else {
-                        // Jinak je zmapuj z pole stringů
                         options = (q.options || []).map((opt: string, i: number) => ({
                             text: opt,
                             isCorrect: q.type === 'singleChoice' 
@@ -497,7 +425,6 @@ const openQuizModal = async (index: number | null = null) => {
                                 : (q.correctIndices || []).includes(i)
                         }));
                     }
-
                     return {
                         uuid: q.uuid,
                         text: questionText,
@@ -513,32 +440,27 @@ const openQuizModal = async (index: number | null = null) => {
       } else {
           currentQuizData.value = null;
       }
-      
       showQuizModal.value = true;
   } catch (err) {
       console.error("[CourseModal] Error in openQuizModal:", err);
       alert("Chyba při otevírání kvízu. Zkontrolujte konzoli.");
   }
 };
-
 const handleQuizSave = (quiz: any) => {
   if (!formData.value.materials) {
       formData.value.materials = [];
   }
-
   const quizMaterial: Material = {
     type: "quiz",
     value: quiz.title,
     data: quiz,
     uuid: quiz.uuid
   };
-
   if (editingQuizIndex.value !== null) {
       formData.value.materials[editingQuizIndex.value] = quizMaterial;
   } else {
       formData.value.materials.push(quizMaterial);
   }
-  
   showQuizModal.value = false;
   editingQuizIndex.value = null;
   currentQuizData.value = null;

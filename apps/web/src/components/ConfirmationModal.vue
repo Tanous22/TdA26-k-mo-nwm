@@ -7,7 +7,6 @@
         <h2 class="text-xl font-extrabold mb-4 text-[#1A1A1A]">
           {{ title }}
         </h2>
-
         <div class="flex gap-4 justify-center mt-6">
           <button
             @click="confirm"
@@ -26,27 +25,21 @@
     </div>
   </Teleport>
 </template>
-
 <script setup lang="ts">
 defineProps<{
   show: boolean;
   title: string;
 }>();
-
 const emit = defineEmits<{
   confirm: [];
   cancel: [];
 }>();
-
 const confirm = () => {
   emit("confirm");
 };
-
 const cancel = () => {
   emit("cancel");
 };
 </script>
-
 <style scoped>
-/* Reuse styles from global css or scoped styles if available */
 </style>

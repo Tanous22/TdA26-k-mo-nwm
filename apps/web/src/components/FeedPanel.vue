@@ -1,8 +1,6 @@
 <template>
   <div class="bg-white rounded-2xl shadow-sm border border-gray-100 p-8">
     <h2 class="text-2xl font-bold text-gray-800 flex items-center gap-2 mb-6">💬 Feed kurzu</h2>
-
-    <!-- Formulář pro přidání zprávy (pouze pro lektory) -->
     <div v-if="isTeacher" class="mb-6 pb-6 border-b-2 border-dashed border-gray-200">
       <div class="flex gap-2">
         <input
@@ -22,16 +20,12 @@
       </div>
       <p v-if="error" class="text-red-500 text-sm mt-2">{{ error }}</p>
     </div>
-
-    <!-- Výpis zpráv -->
     <div v-if="loading" class="text-center py-8 text-gray-400">
       Načítám feed...
     </div>
-
     <div v-else-if="feedMessages.length === 0" class="text-center py-8 text-gray-400">
       Zatím žádné zprávy. Buď první!
     </div>
-
     <div v-else class="space-y-4 max-h-[400px] overflow-y-auto pr-2">
       <div
         v-for="msg in feedMessages"
@@ -55,8 +49,6 @@
             </div>
             <p class="text-gray-700">{{ msg.message }}</p>
           </div>
-
-          <!-- Smazání (pouze pro autora nebo lektory) -->
           <button
             v-if="isTeacher || msg.author === currentUserName"
             @click="deleteMessage(msg.uuid)"
@@ -68,45 +60,34 @@
         </div>
       </div>
     </div>
-
-    <!-- SSE Stream status -->
     <div v-if="isTeacher" class="mt-4 text-xs text-gray-400 text-center">
       {{ isStreamConnected ? "✅ Live" : "⚠️ Odpojeno" }}
     </div>
   </div>
 </template>
-
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted, computed } from 'vue'
 import { useAuth } from '../composables/useAuth'
 import { useNotifications } from '../composables/useNotifications'
 import { useApi } from '../composables/useApi'
-
 const props = defineProps<{
   courseId: string
 }>()
-
 const { user, isTeacher } = useAuth()
 const { success, error: showError } = useNotifications()
 const { API_URL } = useApi()
-
 const feedMessages = ref<any[]>([])
 const newMessage = ref('')
 const loading = ref(true)
 const isSending = ref(false)
 const error = ref('')
 const isStreamConnected = ref(false)
-
 let eventSource: EventSource | null = null
-
 const currentUserName = computed(() => user.value?.name || '')
-
-// Load initial feed
 const loadFeed = async () => {
   try {
     const response = await fetch(`${API_URL}/courses/${props.courseId}/feed`)
     if (!response.ok) throw new Error('Failed to load feed')
-
     const data = await response.json()
     feedMessages.value = data
   } catch (err) {
@@ -117,22 +98,17 @@ const loadFeed = async () => {
     loading.value = false
   }
 }
-
-// Connect to SSE stream
 const connectStream = () => {
   try {
     eventSource = new EventSource(
       `${API_URL}/courses/${props.courseId}/feed/stream`
     )
-
     eventSource.onopen = () => {
       isStreamConnected.value = true
     }
-
     eventSource.onmessage = (event) => {
       try {
         const newMsg = JSON.parse(event.data)
-
         if (newMsg.type === 'delete') {
           feedMessages.value = feedMessages.value.filter(
             (m) => m.uuid !== newMsg.uuid
@@ -151,7 +127,6 @@ const connectStream = () => {
         console.error('Feed parse error:', err)
       }
     }
-
     eventSource.onerror = () => {
       isStreamConnected.value = false
       eventSource?.close()
@@ -161,14 +136,10 @@ const connectStream = () => {
     console.error('Stream connection error:', err)
   }
 }
-
-// Send message
 const sendMessage = async () => {
   if (!newMessage.value.trim() || isSending.value) return
-
   isSending.value = true
   error.value = ''
-
   try {
     const response = await fetch(`${API_URL}/courses/${props.courseId}/feed`, {
       method: 'POST',
@@ -178,9 +149,7 @@ const sendMessage = async () => {
         author: user.value?.name || 'Anonym',
       }),
     })
-
     if (!response.ok) throw new Error('Failed to send message')
-
     newMessage.value = ''
     success('Zpráva odeslána')
   } catch (err) {
@@ -190,19 +159,14 @@ const sendMessage = async () => {
     isSending.value = false
   }
 }
-
-// Delete message
 const deleteMessage = async (uuid: string) => {
   if (!confirm('Opravdu smazat zprávu?')) return
-
   try {
     const response = await fetch(
       `${API_URL}/courses/${props.courseId}/feed/${uuid}`,
       { method: 'DELETE' }
     )
-
     if (!response.ok) throw new Error('Failed to delete message')
-
     feedMessages.value = feedMessages.value.filter((m) => m.uuid !== uuid)
     success('Zpráva smazána')
   } catch (err) {
@@ -211,8 +175,6 @@ const deleteMessage = async (uuid: string) => {
     )
   }
 }
-
-// Format time
 const formatTime = (dateStr: string) => {
   try {
     const date = new Date(dateStr)
@@ -226,17 +188,13 @@ const formatTime = (dateStr: string) => {
     return dateStr
   }
 }
-
 onMounted(() => {
   loadFeed()
   connectStream()
 })
-
 onUnmounted(() => {
   eventSource?.close()
 })
 </script>
-
 <style scoped>
-/* Styles inherited from global styles */
 </style>

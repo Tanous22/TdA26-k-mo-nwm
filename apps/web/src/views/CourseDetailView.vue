@@ -1,6 +1,5 @@
 <template>
   <div class="min-h-screen bg-gray-50 flex flex-col font-sans">
-    <!-- Header -->
     <div class="bg-gradient-to-r from-[#0070BB] to-[#6DD4B1] text-white p-12 shadow-lg relative overflow-hidden">
       <div class="max-w-7xl mx-auto relative z-10 text-center md:text-left">
         <router-link
@@ -9,7 +8,6 @@
         >
           <span>←</span> Zpět na kurzy
         </router-link>
-
         <div v-if="loading" class="animate-pulse space-y-4">
           <div class="h-12 bg-white/20 rounded w-1/3"></div>
           <div class="h-6 bg-white/20 rounded w-1/2"></div>
@@ -21,14 +19,11 @@
         </div>
       </div>
     </div>
-
-    <!-- Main content -->
     <div
       v-if="!loading && course"
       class="flex-1 max-w-7xl mx-auto w-full p-6 grid grid-cols-1 gap-8 -mt-8 relative z-20"
     >
       <div class="space-y-8">
-        <!-- Materials section -->
         <div class="bg-white rounded-2xl shadow-sm border border-gray-100 p-8">
           <div class="flex items-center justify-between mb-6">
             <h2 class="text-2xl font-bold text-gray-800 flex items-center gap-2">📚 Studijní materiály</h2>
@@ -54,14 +49,12 @@
               />
             </div>
           </div>
-
           <div
             v-if="!course.materials || course.materials.length === 0"
             class="text-center py-12 text-gray-400"
           >
             Zatím nejsou k dispozici žádné materiály
           </div>
-
           <div v-else class="space-y-4">
             <div
               v-for="mat in course.materials"
@@ -98,8 +91,6 @@
             </div>
           </div>
         </div>
-
-        <!-- Quizzes section -->
         <div class="bg-white rounded-2xl shadow-sm border border-gray-100 p-8">
           <div class="flex items-center justify-between mb-6">
             <h2 class="text-2xl font-bold text-gray-800 flex items-center gap-2">✏️ Kvízy</h2>
@@ -111,14 +102,12 @@
               + Nový
             </button>
           </div>
-
           <div
             v-if="!course.quizzes || course.quizzes.length === 0"
             class="text-center py-12 text-gray-400"
           >
             Zatím žádné kvízy
           </div>
-
           <div v-else class="space-y-4">
             <div
               v-for="quiz in course.quizzes"
@@ -161,13 +150,9 @@
             </div>
           </div>
         </div>
-
-        <!-- Feed section -->
         <FeedPanel :courseId="courseId" />
       </div>
     </div>
-
-    <!-- Quiz Runner Modal -->
     <div
       v-if="activeQuiz"
       class="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4"
@@ -183,8 +168,6 @@
         />
       </div>
     </div>
-
-    <!-- Quiz Modal -->
     <QuizModal
       :show="showQuizModal"
       :edit-mode="!!editingQuiz"
@@ -192,8 +175,6 @@
       @close="closeQuizModal"
       @save="handleQuizSave"
     />
-
-    <!-- Delete Confirmation Modal -->
     <ConfirmationModal
       :show="showDeleteModal"
       title="Opravdu chcete smazat tento kvíz?"
@@ -202,7 +183,6 @@
     />
   </div>
 </template>
-
 <script setup lang="ts">
 import { ref, onMounted, nextTick } from 'vue'
 import { useRoute } from 'vue-router'
@@ -218,14 +198,11 @@ import {
   getMaterialIcon,
   type Course,
 } from '../composables/useModels'
-
 const route = useRoute()
 const { isTeacher } = useAuth()
 const { success, error: showError } = useNotifications()
-
 const courseId = (route.params.courseId || route.params.uuid) as string
 const API_URL = import.meta.env.VITE_API_URL || '/api'
-
 const loading = ref(true)
 const activeQuiz = ref<Quiz | null>(null)
 const showQuizModal = ref(false)
@@ -235,15 +212,11 @@ const course = ref<Course | null>(null)
 const showDeleteModal = ref(false)
 const quizIdToDelete = ref<string | null>(null)
 const isUploading = ref(false)
-
-// Fetch course data
 const fetchCourse = async () => {
   try {
     loading.value = true
     const response = await fetch(`${API_URL}/courses/${courseId}`)
-
     if (!response.ok) throw new Error('Failed to fetch course')
-
     const data = await response.json()
     course.value = data
   } catch (err) {
@@ -255,15 +228,11 @@ const fetchCourse = async () => {
     loading.value = false
   }
 }
-
-// Material management
 const handleAddLink = async () => {
   const url = prompt('Zadejte URL odkazu:')
   if (!url) return
-
   const name = prompt('Zadejte název odkazu:', 'Nový odkaz')
   if (!name) return
-
   try {
     loading.value = true
     const response = await fetch(`${API_URL}/courses/${courseId}/materials`, {
@@ -276,9 +245,7 @@ const handleAddLink = async () => {
         description: '',
       }),
     })
-
     if (!response.ok) throw new Error('Failed to add material')
-
     success('Odkaz byl přidán')
     await fetchCourse()
   } catch (err) {
@@ -289,13 +256,10 @@ const handleAddLink = async () => {
     loading.value = false
   }
 }
-
 const triggerFileUpload = () => fileInput.value?.click()
-
 const handleFileUpload = async (event: Event) => {
   const file = (event.target as HTMLInputElement).files?.[0]
   if (!file) return
-
   try {
     isUploading.value = true
     const formData = new FormData()
@@ -303,14 +267,11 @@ const handleFileUpload = async (event: Event) => {
     formData.append('type', 'file')
     formData.append('name', file.name)
     formData.append('description', '')
-
     const response = await fetch(`${API_URL}/courses/${courseId}/materials`, {
       method: 'POST',
       body: formData,
     })
-
     if (!response.ok) throw new Error('Failed to upload file')
-
     success('Soubor byl úspěšně nahrán')
     await fetchCourse()
   } catch (err) {
@@ -319,22 +280,17 @@ const handleFileUpload = async (event: Event) => {
     )
   } finally {
     isUploading.value = false
-    // Reset file input
     if (fileInput.value) fileInput.value.value = ''
   }
 }
-
-// Quiz management
 const openQuizModal = () => {
   editingQuiz.value = null
   showQuizModal.value = true
 }
-
 const closeQuizModal = () => {
   showQuizModal.value = false
   editingQuiz.value = null
 }
-
 const startQuiz = (quiz: any) => {
   const formattedQuestions = (quiz.questions || []).map(
     transformQuestionToFrontend
@@ -344,25 +300,20 @@ const startQuiz = (quiz: any) => {
     questions: formattedQuestions,
   }
 }
-
 const editQuiz = async (quiz: any) => {
   try {
     const response = await fetch(
       `${API_URL}/courses/${courseId}/quizzes/${quiz.uuid}`
     )
-
     if (!response.ok) throw new Error(`HTTP ${response.status}`)
-
     const backendData = await response.json()
     const formattedQuestions = (backendData.questions || []).map(
       transformQuestionToFrontend
     )
-
     editingQuiz.value = {
       ...backendData,
       questions: formattedQuestions,
     }
-
     await nextTick()
     showQuizModal.value = true
   } catch (err) {
@@ -371,23 +322,18 @@ const editQuiz = async (quiz: any) => {
     )
   }
 }
-
 const openDeleteModal = (quizUuid: string) => {
   quizIdToDelete.value = quizUuid
   showDeleteModal.value = true
 }
-
 const confirmDelete = async () => {
   if (!quizIdToDelete.value) return
-
   try {
     const response = await fetch(
       `${API_URL}/courses/${courseId}/quizzes/${quizIdToDelete.value}`,
       { method: 'DELETE' }
     )
-
     if (!response.ok) throw new Error(`HTTP ${response.status}`)
-
     success('Kvíz byl úspěšně smazán')
     await fetchCourse()
   } catch (err) {
@@ -399,30 +345,23 @@ const confirmDelete = async () => {
     quizIdToDelete.value = null
   }
 }
-
 const handleQuizSave = async (quizData: any) => {
   try {
     const backendQuestions = quizData.questions.map(transformQuestionToBackend)
-
     const payload = {
       title: quizData.title,
       questions: backendQuestions,
     }
-
     const url = editingQuiz.value
       ? `${API_URL}/courses/${courseId}/quizzes/${editingQuiz.value.uuid}`
       : `${API_URL}/courses/${courseId}/quizzes`
-
     const method = editingQuiz.value ? 'PUT' : 'POST'
-
     const response = await fetch(url, {
       method,
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload),
     })
-
     if (!response.ok) throw new Error(`HTTP ${response.status}`)
-
     success('Kvíz byl úspěšně uložen')
     closeQuizModal()
     await fetchCourse()
@@ -432,12 +371,9 @@ const handleQuizSave = async (quizData: any) => {
     )
   }
 }
-
 onMounted(() => {
   fetchCourse()
 })
 </script>
-
 <style scoped>
-/* Styles inherited from global styles */
 </style>

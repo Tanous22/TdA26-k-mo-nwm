@@ -7,7 +7,6 @@ export interface Material {
     fileUrl?: string
     mimeType?: string
 }
-
 export interface Question {
     uuid: string
     type: 'singleChoice' | 'multipleChoice'
@@ -16,14 +15,12 @@ export interface Question {
     correctIndex?: number
     correctIndices?: number[]
 }
-
 export interface Quiz {
     uuid: string
     title: string
     questions: Question[]
     attemptsCount?: number
 }
-
 export interface Course {
     uuid: string
     name: string
@@ -32,7 +29,6 @@ export interface Course {
     materials: Material[]
     quizzes: Quiz[]
 }
-
 export interface FeedMessage {
     uuid: string
     type: 'message' | 'system'
@@ -42,8 +38,6 @@ export interface FeedMessage {
     updatedAt?: string
     edited?: boolean
 }
-
-// Material utilities
 export function getMaterialIcon(material: Material): string {
     if (material.type === 'url') return '🔗'
     if (material.mimeType?.includes('pdf')) return '📄'
@@ -52,7 +46,6 @@ export function getMaterialIcon(material: Material): string {
     if (material.mimeType?.includes('audio')) return '🔊'
     return '📁'
 }
-
 export function getDifficultyColor(difficulty?: string): string {
     if (difficulty === 'Jednoduchý') return '#91F5AD'
     if (difficulty === 'Střední') return '#FFD93D'
@@ -60,8 +53,6 @@ export function getDifficultyColor(difficulty?: string): string {
     if (difficulty === 'Extrém') return '#8B00FF'
     return '#F9F9F9'
 }
-
-// Data transformation utilities
 export function transformMaterialFromBackend(material: any): Material {
     return {
         uuid: material.uuid,
@@ -73,7 +64,6 @@ export function transformMaterialFromBackend(material: any): Material {
         mimeType: material.mimeType,
     }
 }
-
 export function transformQuestionToFrontend(question: any): any {
     const options = (question.options || []).map((optText: string, idx: number) => ({
         text: optText,
@@ -81,7 +71,6 @@ export function transformQuestionToFrontend(question: any): any {
             ? question.correctIndex === idx
             : (question.correctIndices || []).includes(idx),
     }))
-
     return {
         uuid: question.uuid,
         text: question.question,
@@ -89,11 +78,9 @@ export function transformQuestionToFrontend(question: any): any {
         options,
     }
 }
-
 export function transformQuestionToBackend(question: any): any {
     let correctIndex: number | undefined
     let correctIndices: number[] | undefined
-
     if (question.type === 'single') {
         correctIndex = question.options.findIndex((opt: any) => opt.isCorrect)
         if (correctIndex === -1) correctIndex = 0
@@ -102,7 +89,6 @@ export function transformQuestionToBackend(question: any): any {
             .map((opt: any, idx: number) => (opt.isCorrect ? idx : -1))
             .filter((idx: number) => idx !== -1)
     }
-
     return {
         type: question.type === 'single' ? 'singleChoice' : 'multipleChoice',
         question: question.text,

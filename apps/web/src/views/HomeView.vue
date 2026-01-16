@@ -16,7 +16,6 @@
         </router-link>
       </div>
     </div>
-
     <div class="relative">
       <div
         class="organic-box with-tape p-8 bg-white rotate-2 hover:rotate-0 transition-transform duration-500"
@@ -36,7 +35,5 @@
     </div>
   </div>
 </template>
-
 <script setup lang="ts"></script>
-
 <style scoped></style>

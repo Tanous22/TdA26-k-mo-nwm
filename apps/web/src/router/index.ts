@@ -3,7 +3,6 @@ import HomeView from '../views/HomeView.vue'
 import CoursesView from '../views/CoursesView.vue'
 import LoginView from '../views/LoginView.vue'
 import DashboardView from '../views/DashboardView.vue'
-
 const routes: RouteRecordRaw[] = [
   {
     path: '/',
@@ -32,20 +31,15 @@ const routes: RouteRecordRaw[] = [
     meta: { requiresAuth: true, requiresTeacher: true }
   }
 ]
-
 const router = createRouter({
   history: createWebHistory(),
   routes
 })
-
-// Navigation guard to protect authenticated routes
 router.beforeEach((to, _from, next) => {
   const requiresAuth = to.meta.requiresAuth
   const requiresTeacher = to.meta.requiresTeacher
   const user = localStorage.getItem('user')
-
   if (requiresAuth && !user) {
-    // Redirect to login if trying to access protected route without being logged in
     next('/login')
   } else if (requiresTeacher && user) {
     try {
@@ -63,5 +57,4 @@ router.beforeEach((to, _from, next) => {
     next()
   }
 })
-
 export default router

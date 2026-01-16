@@ -10,11 +10,9 @@
         >
           &times;
         </button>
-
         <h2 class="text-2xl font-extrabold mb-6 text-[#0070BB]">
           {{ editMode ? 'Upravit kvíz' : 'Vytvořit nový kvíz' }}
         </h2>
-
         <div class="space-y-6">
           <div>
             <label class="block font-bold mb-1 text-sm">Název kvízu</label>
@@ -25,7 +23,6 @@
               placeholder="Např. Test z CSS Grid"
             />
           </div>
-
           <div class="space-y-6">
             <div
               v-for="(question, qIndex) in quizData.questions"
@@ -40,7 +37,6 @@
               >
                 &times;
               </button>
-
               <div class="mb-3">
                 <label class="block font-bold mb-1 text-sm"
                   >Otázka {{ qIndex + 1 }}</label
@@ -52,7 +48,6 @@
                   placeholder="Znění otázky..."
                 />
               </div>
-
               <div class="mb-3">
                 <span class="block text-sm font-semibold text-gray-600 mb-2">Typ otázky:</span>
                 <div class="grid grid-cols-2 gap-4">
@@ -80,7 +75,6 @@
                       <span class="block font-bold text-sm text-gray-800">Jedna odpověď</span>
                     </div>
                   </label>
-
                   <label
                     class="cursor-pointer border-2 rounded-lg p-3 flex items-center gap-3 transition-all relative overflow-hidden"
                     :class="[
@@ -107,7 +101,6 @@
                   </label>
                 </div>
               </div>
-
               <div class="space-y-2 pl-2">
                 <label class="block text-xs font-bold text-gray-500 uppercase"
                   >Možnosti (označte správné)</label
@@ -133,14 +126,12 @@
                       class="w-5 h-5 accent-green-500 cursor-pointer rounded"
                     />
                   </div>
-
                   <input
                     v-model="option.text"
                     type="text"
                     class="organic-input flex-grow !py-1 !px-2 !text-sm"
                     :placeholder="'Možnost ' + (oIndex + 1)"
                   />
-
                   <button
                     type="button"
                     @click="removeOption(qIndex, oIndex)"
@@ -149,7 +140,6 @@
                     &times;
                   </button>
                 </div>
-
                 <button
                   type="button"
                   @click="addOption(qIndex)"
@@ -160,7 +150,6 @@
               </div>
             </div>
           </div>
-
           <button
             type="button"
             @click="addQuestion"
@@ -169,12 +158,10 @@
             <span class="text-2xl">+</span>
             <span>Přidat další otázku</span>
           </button>
-
           <div v-if="errorMessage" class="bg-red-50 text-red-600 p-4 rounded-lg font-bold text-sm border border-red-200 flex items-center gap-2 animate-pulse">
             <span>⚠️</span>
             {{ errorMessage }}
           </div>
-
           <div class="pt-4 border-t border-gray-100">
             <button type="button" @click="saveQuiz" class="organic-btn w-full text-lg py-3">
               {{ editMode ? 'Uložit změny' : 'Vytvořit kvíz' }}
@@ -185,50 +172,40 @@
     </div>
   </Teleport>
 </template>
-
 <script setup lang="ts">
 import { ref, watch } from "vue";
-
 interface QuizOption {
   id: string;
   text: string;
   isCorrect: boolean;
 }
-
 interface QuizQuestion {
   id: string;
   text: string;
   type: "single" | "multiple";
   options: QuizOption[];
 }
-
 export interface Quiz {
   uuid?: string; // --- ZMĚNA 1: Přidáno pole pro UUID
   title: string;
   questions: QuizQuestion[];
 }
-
 const props = defineProps<{
   show: boolean;
   editMode?: boolean;
   initialData?: any; 
 }>();
-
 const emit = defineEmits<{
   close: [];
   save: [quiz: Quiz];
 }>();
-
 const errorMessage = ref<string | null>(null);
-
 const quizData = ref<Quiz>({
   title: "",
   questions: [],
 });
-
 const resetForm = () => {
   quizData.value = {
-    // uuid undefined = nový kvíz
     title: "",
     questions: [
       {
@@ -243,41 +220,33 @@ const resetForm = () => {
     ]
   };
 };
-
 watch(() => props.show, (isOpen) => {
   if (isOpen) {
     errorMessage.value = null;
-    
     if (props.editMode && props.initialData) {
       try {
         const sourceData = JSON.parse(JSON.stringify(props.initialData));
-        
         const mappedQuestions = (sourceData.questions || []).map((q: any) => {
           const isMultiple = q.type === 'multipleChoice' || q.type === 'multiple';
           const type = isMultiple ? 'multiple' : 'single';
-          
           const options = Array.isArray(q.options) ? q.options.map((opt: any, idx: number) => {
              const text = typeof opt === 'string' ? opt : opt.text || "";
-             
              let isCorrect = false;
              if (type === 'single') {
                 isCorrect = q.correctIndex === idx || opt.isCorrect === true;
              } else {
                 isCorrect = (q.correctIndices && q.correctIndices.includes(idx)) || opt.isCorrect === true;
              }
-
              return {
                id: crypto.randomUUID(),
                text: text,
                isCorrect
              };
           }) : [];
-
           if (options.length === 0) {
              options.push({ id: crypto.randomUUID(), text: "", isCorrect: true });
              options.push({ id: crypto.randomUUID(), text: "", isCorrect: false });
           }
-
           return {
             id: crypto.randomUUID(), // Interní ID pro Vue for-loop (neřeší backend)
             uuid: q.uuid, // Zde bychom mohli zachovat UUID otázky, pokud bychom chtěli být extra přesní, ale pro DUPLICATE QUIZ bug to není kritické.
@@ -286,7 +255,6 @@ watch(() => props.show, (isOpen) => {
             options: options
           };
         });
-
         quizData.value = {
           uuid: sourceData.uuid, // --- ZMĚNA 2: Tady si pamatujeme ID kvízu!
           title: sourceData.title || "",
@@ -301,7 +269,6 @@ watch(() => props.show, (isOpen) => {
     }
   }
 });
-
 const addQuestion = () => {
   quizData.value.questions.push({
     id: crypto.randomUUID(),
@@ -313,7 +280,6 @@ const addQuestion = () => {
     ],
   });
 };
-
 const removeQuestion = (index: number) => {
   if (quizData.value.questions.length > 1) {
     quizData.value.questions.splice(index, 1);
@@ -321,7 +287,6 @@ const removeQuestion = (index: number) => {
     errorMessage.value = "Kvíz musí mít alespoň jednu otázku.";
   }
 };
-
 const addOption = (qIndex: number) => {
   const question = quizData.value.questions[qIndex];
   if (question) {
@@ -332,7 +297,6 @@ const addOption = (qIndex: number) => {
     });
   }
 };
-
 const removeOption = (qIndex: number, oIndex: number) => {
   const question = quizData.value.questions[qIndex];
   if (question && question.options.length > 2) {
@@ -341,14 +305,12 @@ const removeOption = (qIndex: number, oIndex: number) => {
     errorMessage.value = "Otázka musí mít alespoň dvě možnosti.";
   }
 };
-
 const handleTypeChange = (qIndex: number) => {
   const question = quizData.value.questions[qIndex];
   if (question && question.type === 'single') {
     question.options.forEach((opt, i) => opt.isCorrect = (i === 0));
   }
 };
-
 const setCorrectOption = (qIndex: number, oIndex: number) => {
   const question = quizData.value.questions[qIndex];
   if (question && question.type === 'single') {
@@ -357,12 +319,10 @@ const setCorrectOption = (qIndex: number, oIndex: number) => {
     });
   }
 };
-
 const close = () => {
   emit("close");
   errorMessage.value = null;
 };
-
 const validateQuiz = (): boolean => {
   if (!quizData.value.title.trim()) {
     errorMessage.value = "Prosím vyplňte název kvízu.";
@@ -371,7 +331,6 @@ const validateQuiz = (): boolean => {
   for (let i = 0; i < quizData.value.questions.length; i++) {
     const q = quizData.value.questions[i];
     if (!q) continue;
-
     if (!q.text.trim()) {
       errorMessage.value = `Otázka č. ${i + 1} nemá vyplněný text.`;
       return false;
@@ -389,17 +348,14 @@ const validateQuiz = (): boolean => {
   }
   return true;
 };
-
 const saveQuiz = () => {
   if (!validateQuiz()) {
       return;
   }
-  // Při odesílání se nyní pošle i UUID, pokud existuje
   emit("save", JSON.parse(JSON.stringify(quizData.value)));
   errorMessage.value = null;
 };
 </script>
-
 <style scoped>
 .organic-btn {
   @apply font-bold rounded-lg shadow-sm transition-transform active:scale-95 border-2 border-transparent bg-[#91F5AD] text-[#1A1A1A] hover:bg-[#0070BB] hover:text-white;

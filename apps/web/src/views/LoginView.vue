@@ -16,7 +16,6 @@
         <h2 class="text-3xl font-extrabold text-[#1A1A1A]">Vítej zpět</h2>
         <p class="text-gray-500 font-semibold mt-2">Přihlášení pro lektory</p>
       </div>
-
       <form @submit.prevent="handleLogin" class="space-y-5">
         <div
           v-if="loginError"
@@ -25,7 +24,6 @@
         >
           <span class="block sm:inline font-bold">{{ loginError }}</span>
         </div>
-
         <div>
           <label
             class="block font-bold mb-2 ml-2 text-sm uppercase text-gray-600"
@@ -62,12 +60,10 @@
     </div>
   </div>
 </template>
-
 <script setup lang="ts">
 import { ref, reactive } from "vue";
 import { useRouter } from "vue-router";
 import { useAuth } from "../composables/useAuth";
-
 const router = useRouter();
 const { login: authLogin } = useAuth();
 const loginError = ref("");
@@ -75,11 +71,8 @@ const loginForm = reactive({
   username: "",
   password: "",
 });
-
 const handleLogin = () => {
   loginError.value = "";
-
-  // Demo credentials
   if (
     loginForm.username.trim() === "lecturer" &&
     loginForm.password.trim() === "TdA26!"
@@ -96,5 +89,4 @@ const handleLogin = () => {
   }
 };
 </script>
-
 <style scoped></style>

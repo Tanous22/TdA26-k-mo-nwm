@@ -29,7 +29,6 @@
           </div>
         </div>
       </aside>
-
       <div class="md:w-3/4 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-10 pb-12">
         <div v-if="loading" class="col-span-full text-center text-gray-500 font-bold">
           Načítání kurzů...
@@ -52,15 +51,12 @@
     </div>
   </div>
 </template>
-
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import CourseCard from '../components/CourseCard.vue'
 import { useNotifications } from '../composables/useNotifications'
 import { useApi } from '../composables/useApi'
-
-// Lokální definice rozhraní upravená pro striktní shodu s CourseCard
 interface Course {
   uuid: string
   name: string
@@ -70,40 +66,30 @@ interface Course {
   materials: any[] // ZMĚNA: Odstraněn otazník (povinné pole)
   quizzes: any[]   // ZMĚNA: Odstraněn otazník (povinné pole)
 }
-
 const router = useRouter()
 const { API_URL } = useApi()
 const { error: showError } = useNotifications()
-
 const searchQuery = ref('')
 const activeCategory = ref('Všechny')
 const categories = ['Všechny', 'Programování', 'Design & Art', 'Marketing', 'Soft Skills']
-
 const courses = ref<Course[]>([])
 const loading = ref(true)
-
 const filteredCourses = computed(() => {
   return courses.value.filter((course) => {
     const matchesSearch = course.name
       .toLowerCase()
       .includes(searchQuery.value.toLowerCase())
-
     const category = course.category || 'Programování'
     const matchesCategory = activeCategory.value === 'Všechny' || category === activeCategory.value
-
     return matchesSearch && matchesCategory
   })
 })
-
 const fetchCourses = async () => {
   try {
     loading.value = true
     const response = await fetch(`${API_URL}/courses`)
-
     if (!response.ok) throw new Error('Failed to fetch courses')
-
     const data = await response.json()
-
     courses.value = data.map((course: any, index: number) => ({
       uuid: course.uuid,
       name: course.name,
@@ -122,17 +108,14 @@ const fetchCourses = async () => {
     loading.value = false
   }
 }
-
 const viewCourse = (course: Course) => {
   router.push({
     name: 'course-detail',
     params: { courseId: course.uuid },
   })
 }
-
 onMounted(() => {
   fetchCourses()
 })
 </script>
-
 <style scoped></style>

@@ -1,11 +1,8 @@
 import "dotenv/config";
 import { pool } from "./index.js";
-
 export async function initDatabase() {
   try {
     console.log("Initializing database schema...");
-
-    // 1. Tabulka USERS
     await pool.execute(`
       CREATE TABLE IF NOT EXISTS users (
         id INT AUTO_INCREMENT PRIMARY KEY,
@@ -15,8 +12,6 @@ export async function initDatabase() {
         updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
       )
     `);
-
-    // 2. Tabulka COURSES
     await pool.execute(`
       CREATE TABLE IF NOT EXISTS courses (
         id INT AUTO_INCREMENT PRIMARY KEY,
@@ -29,8 +24,6 @@ export async function initDatabase() {
         updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
       )
     `);
-
-    // 3. Tabulka MATERIALS
     await pool.execute(`
       CREATE TABLE IF NOT EXISTS materials (
         id INT AUTO_INCREMENT PRIMARY KEY,
@@ -46,8 +39,6 @@ export async function initDatabase() {
         FOREIGN KEY (course_id) REFERENCES courses(id) ON DELETE CASCADE
       )
     `);
-
-    // 4. Tabulka QUIZZES
     await pool.execute(`
       CREATE TABLE IF NOT EXISTS quizzes (
         id INT AUTO_INCREMENT PRIMARY KEY,
@@ -59,8 +50,6 @@ export async function initDatabase() {
         FOREIGN KEY (course_id) REFERENCES courses(id) ON DELETE CASCADE
       )
     `);
-
-    // 5. Tabulka QUIZ_QUESTIONS
     await pool.execute(`
       CREATE TABLE IF NOT EXISTS quiz_questions (
         id INT AUTO_INCREMENT PRIMARY KEY,
@@ -74,8 +63,6 @@ export async function initDatabase() {
         FOREIGN KEY (quiz_id) REFERENCES quizzes(id) ON DELETE CASCADE
       )
     `);
-
-    // 6. Tabulka QUIZ_ATTEMPTS
     await pool.execute(`
       CREATE TABLE IF NOT EXISTS quiz_attempts (
         id INT AUTO_INCREMENT PRIMARY KEY,
@@ -88,8 +75,6 @@ export async function initDatabase() {
         FOREIGN KEY (quiz_id) REFERENCES quizzes(id) ON DELETE CASCADE
       )
     `);
-
-    // 7. Tabulka FEED_EVENTS (Opraveno: přidán updated_at a is_edited)
     await pool.execute(`
       CREATE TABLE IF NOT EXISTS feed_events (
         id INT AUTO_INCREMENT PRIMARY KEY,
@@ -104,7 +89,6 @@ export async function initDatabase() {
         FOREIGN KEY (course_id) REFERENCES courses(id) ON DELETE CASCADE
       )
     `);
-
   } catch (error) {
     console.error("CRITICAL: Error initializing database:", error);
   }

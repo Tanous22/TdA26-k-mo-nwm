@@ -6,7 +6,6 @@
         {{ quiz.questions.length }} otázek • Vyplněno {{ quiz.attemptsCount || 0 }}×
       </p>
     </div>
-
     <div v-if="!submitted" class="space-y-8">
       <div
         v-for="(question, qIndex) in quiz.questions"
@@ -20,7 +19,6 @@
             (Více odpovědí)
           </span>
         </h4>
-
         <div class="space-y-3">
           <div
             v-for="(option, oIndex) in question.options"
@@ -42,12 +40,10 @@
             >
               <span v-if="isSelected(question.uuid, oIndex)" class="text-white font-bold text-sm">✓</span>
             </div>
-            
             <span class="font-medium">{{ option.text }}</span>
           </div>
         </div>
       </div>
-
       <div class="flex justify-end gap-4 pt-4 border-t border-gray-100">
         <button
           @click="$emit('cancel')"
@@ -63,7 +59,6 @@
         </button>
       </div>
     </div>
-
     <div v-else class="text-center animate-bounce-in">
       <div class="mb-8 p-8 bg-gradient-to-br from-green-400 to-green-600 rounded-2xl text-white shadow-lg organic-box !border-none">
         <div class="text-6xl mb-4">🎉</div>
@@ -75,7 +70,6 @@
           <strong>{{ Math.round((score / (result?.maxScore || quiz.questions.length)) * 100) }}%</strong>
         </p>
       </div>
-
       <button
         @click="$emit('close')"
         class="organic-btn secondary px-8"
@@ -85,20 +79,17 @@
     </div>
   </div>
 </template>
-
 <script lang="ts">
 export interface Option {
   text: string
   isCorrect?: boolean
 }
-
 export interface Question {
   uuid: string
   text: string
   type: 'single' | 'multiple'
   options: Option[]
 }
-
 export interface Quiz {
   id?: string
   uuid?: string
@@ -108,39 +99,30 @@ export interface Quiz {
   attemptsCount?: number
 }
 </script>
-
 <script setup lang="ts">
 import { ref, computed } from 'vue'
 import { useNotifications } from '../composables/useNotifications'
 import { useApi } from '../composables/useApi'
-
 const props = defineProps<{
   quiz: Quiz
   courseId: string
 }>()
-
 const emit = defineEmits<{
   close: []
   cancel: []
 }>()
-
 const { success, error: showError } = useNotifications()
 const { API_URL } = useApi()
-
 const answers = ref<Record<string, number[]>>({})
 const submitted = ref(false)
 const result = ref<{ score: number; maxScore: number } | null>(null)
-
 const isSelected = (qId: string, oIndex: number) =>
   answers.value[qId]?.includes(oIndex) ?? false
-
 const toggleAnswer = (qId: string, oIndex: number, type: 'single' | 'multiple') => {
   if (submitted.value) return
-
   if (!answers.value[qId]) {
     answers.value[qId] = []
   }
-
   if (type === 'single') {
     answers.value[qId] = [oIndex]
   } else {
@@ -152,9 +134,7 @@ const toggleAnswer = (qId: string, oIndex: number, type: 'single' | 'multiple') 
     }
   }
 }
-
 const score = computed(() => result.value?.score ?? 0)
-
 const submitQuiz = async () => {
   try {
     const payload = {
@@ -162,7 +142,6 @@ const submitQuiz = async () => {
         .map((q) => {
           const userAns = answers.value[q.uuid]
           if (!userAns || userAns.length === 0) return null
-
           if (q.type === 'single') {
             return {
               uuid: q.uuid,
@@ -177,7 +156,6 @@ const submitQuiz = async () => {
         })
         .filter((a) => a !== null),
     }
-
     const quizId = props.quiz.uuid || props.quiz.id
     const response = await fetch(
       `${API_URL}/courses/${props.courseId}/quizzes/${quizId}/submit`,
@@ -187,9 +165,7 @@ const submitQuiz = async () => {
         body: JSON.stringify(payload),
       }
     )
-
     if (!response.ok) throw new Error('Failed to submit quiz')
-
     const data = await response.json()
     result.value = {
       score: data.score,
@@ -204,7 +180,5 @@ const submitQuiz = async () => {
   }
 }
 </script>
-
 <style scoped>
-/* Scoped styles if needed */
 </style>
