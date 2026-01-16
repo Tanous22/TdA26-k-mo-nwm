@@ -4,8 +4,8 @@ Tento repozitář obsahuje zdrojový kód webové aplikace pro správu vzděláv
 
 ## 👥 Členové týmu
 
-* **Tanous22** – Backend & Frontend (Návrh architektury, implementace serverové i klientské části)
-* **Kolega** – Tester (Quality Assurance, testování funkčnosti a uživatelského rozhraní)
+* **Daniel Rulík** – Backend & Frontend (Návrh architektury, implementace serverové i klientské části)
+* **Miroslav Švihel** – Tester (Quality Assurance, testování funkčnosti a uživatelského rozhraní)
 
 ## 🛠 Použité technologie
 
