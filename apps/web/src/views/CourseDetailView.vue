@@ -237,44 +237,42 @@ const editQuiz = async (quiz: Quiz) => {
   
   try {
     const fetchUrl = `${apiUrl}/courses/${courseId}/quizzes/${quiz.uuid}`;
-    console.log("[CourseDetail] Fetching quiz detail from:", fetchUrl);
-    
     const res = await fetch(fetchUrl);
-    if (!res.ok) {
-      const errorText = await res.text();
-      throw new Error(`HTTP ${res.status}: ${errorText || res.statusText}`);
-    }
     
-    const fullQuizData = await res.json();
-    console.log("[CourseDetail] Received quiz data:", {
-      title: fullQuizData.title,
-      questionsCount: fullQuizData.questions?.length || 0,
-      uuid: fullQuizData.uuid
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    
+    const backendData = await res.json();
+
+    // --- PŘEKLADAČ DAT (Backend -> Frontend) ---
+    const formattedQuestions = (backendData.questions || []).map((q: any) => {
+      // 1. Převedeme možnosti (strings -> objekty s isCorrect)
+      const formattedOptions = (q.options || []).map((optText: string, idx: number) => ({
+         text: optText,
+         isCorrect: q.type === 'singleChoice' 
+            ? q.correctIndex === idx 
+            : (q.correctIndices || []).includes(idx)
+      }));
+
+      return {
+        uuid: q.uuid, // Důležité pro UPDATE (aby se otázka nesmazala)
+        text: q.question, // Backend: question -> Frontend: text
+        type: q.type === 'singleChoice' ? 'single' : 'multiple', // Překlad typu
+        options: formattedOptions
+      };
     });
 
-    // Validace dat
-    if (!fullQuizData.title) {
-        console.warn("[CourseDetail] Quiz has no title!");
-    }
+    // Nastavíme data ve formátu, kterému Modal rozumí
+    editingQuiz.value = {
+        ...backendData,
+        questions: formattedQuestions
+    };
     
-    if (!fullQuizData.questions || fullQuizData.questions.length === 0) {
-        console.warn("[CourseDetail] Quiz has no questions in DB!");
-        alert("⚠️ Tento kvíz nemá žádné otázky. Můžete je přidat.");
-    } else {
-        console.log("[CourseDetail] Quiz has", fullQuizData.questions.length, "questions");
-    }
-
-    // Nastavit data pro editaci
-    editingQuiz.value = fullQuizData; 
-    
-    // Počkáme, až Vue zpracuje změnu proměnné editingQuiz, než otevřeme modál
     await nextTick();
-    console.log("[CourseDetail] Opening quiz modal for edit");
     showQuizModal.value = true;
+
   } catch (e) {
-    const errorMsg = e instanceof Error ? e.message : "Neznámá chyba";
     console.error("[CourseDetail] Edit quiz failed:", e);
-    alert(`❌ Chyba při načítání kvízu: ${errorMsg}`);
+    alert("❌ Chyba při načítání kvízu.");
   }
 };
 

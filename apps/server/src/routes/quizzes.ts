@@ -257,44 +257,81 @@ quizzesRouter.get("/:quizId", async (req: Request, res: Response) => {
 });
 
 // PUT - Update kvízu
+// PUT - Update kvízu (Chytrý update: Insert/Update/Delete)
 quizzesRouter.put("/:quizId", async (req: Request, res: Response) => {
     const { quizId } = req.params;
     const { title, questions } = req.body;
-    console.log(`[DEBUG-QUIZ] PUT /${quizId} HIT`);
+    console.log(`[DEBUG-QUIZ] PUT /${quizId} HIT - Smart Update`);
 
     try {
+        // 1. Najdeme ID kvízu podle UUID
         const [rows] = await pool.execute("SELECT id FROM quizzes WHERE uuid = ?", [quizId]);
         const quizData = (rows as any[])[0];
         if (!quizData) {
-            console.warn(`[DEBUG-QUIZ] Quiz not found for update: ${quizId}`);
             res.status(404).json({ error: "Quiz not found" });
             return;
         }
         const dbQuizId = quizData.id;
 
+        // 2. Aktualizace názvu kvízu
         await pool.execute("UPDATE quizzes SET title = ? WHERE id = ?", [title, dbQuizId]);
-        await pool.execute("DELETE FROM quiz_questions WHERE quiz_id = ?", [dbQuizId]);
 
+        // 3. Načteme existující UUID otázek v DB (abychom věděli, co smazat)
+        const [existingRows] = await pool.execute("SELECT uuid FROM quiz_questions WHERE quiz_id = ?", [dbQuizId]);
+        const existingUuids = (existingRows as any[]).map(r => r.uuid);
+        
+        const keptUuids: string[] = []; // Seznam UUID, která v kvízu zůstávají
         const savedQuestions = [];
 
+        // 4. Projdeme otázky z formuláře
         for (const q of questions) {
-            const qUuid = uuidv4();
+            // Příprava dat
             let correctAnswer: any = null;
             if (q.type === 'singleChoice') correctAnswer = q.correctIndex;
             else if (q.type === 'multipleChoice') correctAnswer = q.correctIndices;
 
-            await pool.execute(
-                `INSERT INTO quiz_questions (uuid, quiz_id, type, question, options, correct_answer) 
-                 VALUES (?, ?, ?, ?, ?, ?)`,
-                [qUuid, dbQuizId, q.type, q.question, JSON.stringify(q.options), JSON.stringify(correctAnswer)]
-            );
-            savedQuestions.push({ ...q, uuid: qUuid });
+            const optionsStr = JSON.stringify(q.options);
+            const correctStr = JSON.stringify(correctAnswer);
+
+            if (q.uuid && existingUuids.includes(q.uuid)) {
+                // --- A) UPDATE: Otázka už existuje, jen ji upravíme ---
+                console.log(`[DEBUG-QUIZ] Updating question ${q.uuid}`);
+                await pool.execute(
+                    `UPDATE quiz_questions 
+                     SET type = ?, question = ?, options = ?, correct_answer = ? 
+                     WHERE uuid = ? AND quiz_id = ?`,
+                    [q.type, q.question, optionsStr, correctStr, q.uuid, dbQuizId]
+                );
+                keptUuids.push(q.uuid);
+                savedQuestions.push(q); // Vracíme původní objekt (má UUID)
+            } else {
+                // --- B) INSERT: Otázka je nová nebo nemá UUID ---
+                const newUuid = uuidv4();
+                console.log(`[DEBUG-QUIZ] Inserting new question ${newUuid}`);
+                await pool.execute(
+                    `INSERT INTO quiz_questions (uuid, quiz_id, type, question, options, correct_answer) 
+                     VALUES (?, ?, ?, ?, ?, ?)`,
+                    [newUuid, dbQuizId, q.type, q.question, optionsStr, correctStr]
+                );
+                savedQuestions.push({ ...q, uuid: newUuid }); // Vracíme s novým UUID
+            }
         }
 
+        // 5. DELETE: Smažeme otázky, které byly v DB, ale v novém seznamu už nejsou
+        const toDelete = existingUuids.filter(id => !keptUuids.includes(id));
+        if (toDelete.length > 0) {
+            console.log(`[DEBUG-QUIZ] Deleting ${toDelete.length} removed questions: ${toDelete.join(', ')}`);
+            // Dynamicky vytvoříme zástupné znaky (?, ?, ?) podle počtu mazaných
+            const placeholders = toDelete.map(() => '?').join(',');
+            await pool.execute(
+                `DELETE FROM quiz_questions WHERE uuid IN (${placeholders}) AND quiz_id = ?`,
+                [...toDelete, dbQuizId]
+            );
+        }
+
+        // 6. Spočítáme pokusy pro odpověď
         const [countRows] = await pool.execute("SELECT COUNT(*) as count FROM quiz_attempts WHERE quiz_id = ?", [dbQuizId]);
         const count = (countRows as any)[0].count;
-
-        console.log(`[DEBUG-QUIZ] Update successful for ${quizId}`);
 
         res.status(200).json({ 
             uuid: quizId, 
