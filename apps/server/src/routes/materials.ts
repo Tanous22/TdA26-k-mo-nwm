@@ -231,11 +231,11 @@ materialsRouter.put("/:materialId", handleUpload, async (req: Request, res: Resp
         try {
             const feedUuid = uuidv4();
             const feedContent = `Materiál aktualizován: ${finalName}`;
-            const [[courseData]] = await pool.execute(
+            const [courseData] = await pool.execute(
                 "SELECT id FROM courses WHERE uuid = ?",
                 [courseId]
             );
-            const courseIntId = (courseData as any)?.id;
+            const courseIntId = ((courseData as any)?.[0])?.id;
             
             if (courseIntId) {
                 await pool.execute(
@@ -303,11 +303,11 @@ materialsRouter.delete("/:materialId", async (req: Request, res: Response) => {
         try {
             const feedUuid = uuidv4();
             const feedContent = `Materiál smazán: ${materialName}`;
-            const [[courseData]] = await pool.execute(
+            const [courseData] = await pool.execute(
                 "SELECT id FROM courses WHERE uuid = ?",
                 [courseId]
             );
-            const courseIntId = (courseData as any)?.id;
+            const courseIntId = ((courseData as any)?.[0])?.id;
             
             if (courseIntId) {
                 await pool.execute(
