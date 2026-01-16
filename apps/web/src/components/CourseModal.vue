@@ -16,7 +16,7 @@
           {{ isEditing ? "Upravit kurz" : "Vytvořit nový kurz" }}
         </h2>
 
-        <form @submit.prevent="saveCourse" class="space-y-4">
+        <form v-if="isFormReady" @submit.prevent="saveCourse" class="space-y-4">
           <div>
             <label class="block font-bold mb-1 text-sm">Název kurzu</label>
             <input
@@ -155,6 +155,10 @@
             </button>
           </div>
         </form>
+        
+        <div v-else class="text-center py-10 text-gray-500 font-bold">
+           Načítání editoru...
+        </div>
       </div>
 
       <ConfirmationModal
@@ -211,6 +215,9 @@ const emit = defineEmits<{
   save: [course: Course, isEditing: boolean];
 }>();
 
+// ZMĚNA: Přidán stav připravenosti formuláře pro "tvrdý reset"
+const isFormReady = ref(false);
+
 const isEditing = ref(false);
 const materialType = ref<"url" | "file" | "quiz">("url");
 const newMaterialInput = ref("");
@@ -235,8 +242,11 @@ const defaultFormState = (): Course => ({
 
 const formData = ref<Course>(defaultFormState());
 
+// ZMĚNA: Funkce initForm nyní kompletně zabije a znovu vytvoří formulář
 const initForm = async () => {
-  await nextTick();
+  // 1. Schováme formulář (zničíme staré inputy v DOMu)
+  isFormReady.value = false;
+  await nextTick(); 
   
   if (props.course) {
       isEditing.value = true;
@@ -274,6 +284,10 @@ const initForm = async () => {
   urlError.value = null;
   tempFile.value = null;
   materialType.value = "url";
+
+  // 2. Oživíme formulář (vytvoří se nové čisté inputy napojené na data)
+  await nextTick();
+  isFormReady.value = true;
 };
 
 watch(
@@ -283,6 +297,8 @@ watch(
       modalKey.value++;
       initForm();
     } else {
+      // Při zavření pro jistotu taky vyčistíme
+      isFormReady.value = false;
       editingQuizIndex.value = null;
       currentQuizData.value = null;
       showQuizDeleteModal.value = false;
@@ -380,7 +396,7 @@ const close = () => {
   emit("close");
 };
 
-// --- API PRO KVÍZY (OPRAVENO: PŘEKLAD DAT PRO EDITOR) ---
+// --- API PRO KVÍZY ---
 const openQuizModal = async (index: number | null = null) => {
   editingQuizIndex.value = index;
   
@@ -391,13 +407,11 @@ const openQuizModal = async (index: number | null = null) => {
       if (mat && mat.type === 'quiz' && mat.uuid && formData.value.uuid) {
           try {
              console.log(`[CourseModal] Fetching quiz details: ${mat.uuid}`);
-             // Tady je ten chybějící GET request:
              const res = await fetch(`${apiUrl}/courses/${formData.value.uuid}/quizzes/${mat.uuid}`);
              
              if (res.ok) {
                  const detailedQuiz = await res.json();
                  console.log("[CourseModal] Quiz details loaded:", detailedQuiz.questions?.length);
-                 // Uložíme čerstvá data do materiálu
                  mat.data = detailedQuiz; 
              } else {
                  console.error("[CourseModal] Failed to load quiz details");
@@ -407,17 +421,14 @@ const openQuizModal = async (index: number | null = null) => {
           }
       }
 
-      // 2. PŘÍPRAVA DAT PRO EDITOR (MAPPING)
+      // 2. PŘÍPRAVA DAT PRO EDITOR
       if (mat && mat.type === 'quiz' && mat.data) {
-          // Deep copy aby se neupravovalo přímo
           const rawData = JSON.parse(JSON.stringify(mat.data));
           
           if (rawData.questions) {
              rawData.questions = rawData.questions.map((q: any) => {
-                // Pokud už to vypadá jako frontend data, nechat být
                 if (q.options && typeof q.options[0] === 'object') return q;
 
-                // Jinak přeformátovat z DB formátu do Editor formátu
                 return {
                     uuid: q.uuid,
                     text: q.question || q.text,
@@ -433,7 +444,6 @@ const openQuizModal = async (index: number | null = null) => {
           }
           currentQuizData.value = rawData;
       } else {
-          // Fallback pro nový prázdný kvíz
           currentQuizData.value = null;
       }
   } else {
