@@ -4,6 +4,7 @@ import { pool } from "../db/index.js";
 // 1. DŮLEŽITÉ IMPORTY
 import { quizzesRouter } from "./quizzes.js";
 import { materialsRouter } from "./materials.js";
+import { feedRouter } from "./feed.js";
 import { broadcastToCourse } from "./feed.js";
 
 export const coursesRouter = Router();
@@ -12,6 +13,7 @@ export const coursesRouter = Router();
 // Bez tohoto server neví, že existují nějaké kvízy nebo materiály!
 coursesRouter.use("/:courseId/quizzes", quizzesRouter);
 coursesRouter.use("/:courseId/materials", materialsRouter);
+coursesRouter.use("/:courseId/feed", feedRouter);
 
 // --- Zbytek kódu pro kurzy ---
 

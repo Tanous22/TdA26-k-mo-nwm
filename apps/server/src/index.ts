@@ -34,17 +34,7 @@ apiRoutes.get("/", (_req, res) => {
 app.use("/", apiRoutes);
 apiRoutes.use("/users", userRoutes);
 
-// Live Feed (SSE) - FÁZE 4
-apiRoutes.use("/courses/:courseId/feed", feedRouter);
-
-// Kvízy
-apiRoutes.use("/courses/:courseId/quizzes", quizzesRouter);
-
-// Materiály
-apiRoutes.use("/courses/:courseId/materials", materialsRouter);
-
-
-
+// Kurzy - veškerá vnořená logika (materiály, kvízy, feed) je v coursesRouter
 apiRoutes.use("/courses", coursesRouter);
 
 const port = process.env.PORT || 3000;

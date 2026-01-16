@@ -77,177 +77,166 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted, computed } from "vue";
-import { useAuth } from "../composables/useAuth";
+import { ref, onMounted, onUnmounted, computed } from 'vue'
+import { useAuth } from '../composables/useAuth'
+import { useNotifications } from '../composables/useNotifications'
+import { useApi } from '../composables/useApi'
 
 const props = defineProps<{
-  courseId: string;
-}>();
+  courseId: string
+}>()
 
-const { user } = useAuth();
-const apiUrl = import.meta.env.VITE_API_URL || "/api";
+const { user, isTeacher } = useAuth()
+const { success, error: showError } = useNotifications()
+const { API_URL } = useApi()
 
-const feedMessages = ref<any[]>([]);
-const newMessage = ref("");
-const loading = ref(true);
-const isSending = ref(false);
-const error = ref("");
-const isStreamConnected = ref(false);
-let eventSource: EventSource | null = null;
+const feedMessages = ref<any[]>([])
+const newMessage = ref('')
+const loading = ref(true)
+const isSending = ref(false)
+const error = ref('')
+const isStreamConnected = ref(false)
 
-const isTeacher = computed(() => 
-  user.value?.name?.toLowerCase().includes("lektor") || user.value?.email === "lektor@example.com"
-);
+let eventSource: EventSource | null = null
 
-const currentUserName = computed(() => user.value?.name || "");
+const currentUserName = computed(() => user.value?.name || '')
 
-// Načtení feedu
+// Load initial feed
 const loadFeed = async () => {
   try {
-    const res = await fetch(`${apiUrl}/courses/${props.courseId}/feed`);
-    if (!res.ok) throw new Error("Failed to load feed");
-    const data = await res.json();
-    feedMessages.value = data;
-    loading.value = false;
-  } catch (e) {
-    console.error("[FeedPanel] Load feed error:", e);
-    loading.value = false;
-  }
-};
+    const response = await fetch(`${API_URL}/courses/${props.courseId}/feed`)
+    if (!response.ok) throw new Error('Failed to load feed')
 
-// Připojení k SSE streamu
+    const data = await response.json()
+    feedMessages.value = data
+  } catch (err) {
+    showError(
+      err instanceof Error ? err.message : 'Chyba při načítání feedu'
+    )
+  } finally {
+    loading.value = false
+  }
+}
+
+// Connect to SSE stream
 const connectStream = () => {
   try {
     eventSource = new EventSource(
-      `${apiUrl}/courses/${props.courseId}/feed/stream`
-    );
+      `${API_URL}/courses/${props.courseId}/feed/stream`
+    )
 
     eventSource.onopen = () => {
-      console.log("[FeedPanel] Stream connected");
-      isStreamConnected.value = true;
-    };
+      isStreamConnected.value = true
+    }
 
     eventSource.onmessage = (event) => {
       try {
-        const newMsg = JSON.parse(event.data);
-        console.log("[FeedPanel] New message from stream:", newMsg);
+        const newMsg = JSON.parse(event.data)
 
-        // Pokud je to delete event, smazat zprávu
-        if (newMsg.type === "delete") {
-          feedMessages.value = feedMessages.value.filter(m => m.uuid !== newMsg.uuid);
+        if (newMsg.type === 'delete') {
+          feedMessages.value = feedMessages.value.filter(
+            (m) => m.uuid !== newMsg.uuid
+          )
         } else {
-          // Přidat nebo aktualizovat zprávu
-          const index = feedMessages.value.findIndex(m => m.uuid === newMsg.uuid);
+          const index = feedMessages.value.findIndex(
+            (m) => m.uuid === newMsg.uuid
+          )
           if (index >= 0) {
-            feedMessages.value[index] = newMsg;
+            feedMessages.value[index] = newMsg
           } else {
-            feedMessages.value.unshift(newMsg);
+            feedMessages.value.unshift(newMsg)
           }
         }
-      } catch (e) {
-        console.error("[FeedPanel] Parse error:", e);
+      } catch (err) {
+        console.error('Feed parse error:', err)
       }
-    };
+    }
 
     eventSource.onerror = () => {
-      console.log("[FeedPanel] Stream disconnected");
-      isStreamConnected.value = false;
-      eventSource?.close();
-      // Pokus o znovu připojení za 3 sekundy
-      setTimeout(connectStream, 3000);
-    };
-  } catch (e) {
-    console.error("[FeedPanel] Stream error:", e);
+      isStreamConnected.value = false
+      eventSource?.close()
+      setTimeout(connectStream, 3000)
+    }
+  } catch (err) {
+    console.error('Stream connection error:', err)
   }
-};
+}
 
-// Odeslání zprávy
+// Send message
 const sendMessage = async () => {
-  if (!newMessage.value.trim() || isSending.value) return;
+  if (!newMessage.value.trim() || isSending.value) return
 
-  isSending.value = true;
-  error.value = "";
+  isSending.value = true
+  error.value = ''
 
   try {
-    const res = await fetch(`${apiUrl}/courses/${props.courseId}/feed`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
+    const response = await fetch(`${API_URL}/courses/${props.courseId}/feed`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         message: newMessage.value,
-        author: user.value?.name || "Anonym",
+        author: user.value?.name || 'Anonym',
       }),
-    });
+    })
 
-    if (!res.ok) throw new Error("Failed to send message");
+    if (!response.ok) throw new Error('Failed to send message')
 
-    newMessage.value = "";
-  } catch (e) {
-    error.value = e instanceof Error ? e.message : "Chyba při odesílání";
-    console.error("[FeedPanel] Send error:", e);
+    newMessage.value = ''
+    success('Zpráva odeslána')
+  } catch (err) {
+    error.value = err instanceof Error ? err.message : 'Chyba při odesílání'
+    showError(error.value)
   } finally {
-    isSending.value = false;
+    isSending.value = false
   }
-};
+}
 
-// Smazání zprávy
+// Delete message
 const deleteMessage = async (uuid: string) => {
-  if (!confirm("Opravdu smazat zprávu?")) return;
+  if (!confirm('Opravdu smazat zprávu?')) return
 
   try {
-    const res = await fetch(`${apiUrl}/courses/${props.courseId}/feed/${uuid}`, {
-      method: "DELETE",
-    });
+    const response = await fetch(
+      `${API_URL}/courses/${props.courseId}/feed/${uuid}`,
+      { method: 'DELETE' }
+    )
 
-    if (!res.ok) throw new Error("Failed to delete message");
+    if (!response.ok) throw new Error('Failed to delete message')
 
-    console.log("[FeedPanel] Message deleted");
-  } catch (e) {
-    error.value = e instanceof Error ? e.message : "Chyba při mazání";
-    console.error("[FeedPanel] Delete error:", e);
+    feedMessages.value = feedMessages.value.filter((m) => m.uuid !== uuid)
+    success('Zpráva smazána')
+  } catch (err) {
+    showError(
+      err instanceof Error ? err.message : 'Chyba při mazání zprávy'
+    )
   }
-};
+}
 
-// Formátování času
-const formatTime = (date: string) => {
+// Format time
+const formatTime = (dateStr: string) => {
   try {
-    const d = new Date(date);
-    const now = new Date();
-    const diff = now.getTime() - d.getTime();
-    const mins = Math.floor(diff / 60000);
-    const hours = Math.floor(diff / 3600000);
-    const days = Math.floor(diff / 86400000);
-
-    if (mins < 1) return "Právě teď";
-    if (mins < 60) return `${mins}m`;
-    if (hours < 24) return `${hours}h`;
-    if (days < 7) return `${days}d`;
-
-    return d.toLocaleDateString("cs-CZ");
+    const date = new Date(dateStr)
+    return date.toLocaleString('cs-CZ', {
+      month: '2-digit',
+      day: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit',
+    })
   } catch {
-    return new Date(date).toLocaleString("cs-CZ");
+    return dateStr
   }
-};
+}
 
 onMounted(() => {
-  loadFeed();
-  connectStream();
-});
+  loadFeed()
+  connectStream()
+})
 
 onUnmounted(() => {
-  if (eventSource) {
-    eventSource.close();
-  }
-});
+  eventSource?.close()
+})
 </script>
 
 <style scoped>
-.organic-input {
-  @apply border-2 border-gray-200 rounded-lg px-4 py-2 focus:outline-none focus:border-[#0070BB] transition-colors;
-  border-radius: 255px 15px 225px 15px / 15px 225px 15px 255px;
-}
-
-.organic-btn {
-  @apply font-bold rounded-lg shadow-sm transition-transform active:scale-95 border-2 border-transparent;
-  border-radius: 255px 15px 225px 15px / 15px 225px 15px 255px;
-}
+/* Styles inherited from global styles */
 </style>
