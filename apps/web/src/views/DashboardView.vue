@@ -165,6 +165,7 @@ const fetchCourses = async () => {
 const openModal = (course?: Course) => {
   // DEEP CLONE kurzu aby se zabránilo mutaci originálního objektu
   editingCourse.value = course ? JSON.parse(JSON.stringify(course)) : null;
+  console.log("[Dashboard] openModal called, course=", course?.name, "setting showModal=true");
   showModal.value = true;
 };
 
@@ -231,8 +232,12 @@ const saveCourse = async (courseData: Course, isEditing: boolean) => {
     }
 
     await fetchCourses(); 
+    console.log("[Dashboard] fetchCourses done, closing modal");
     showModal.value = false;
     editingCourse.value = null;
+    
+    // Malá pauza aby se stihlo zavření modalu
+    await new Promise(resolve => setTimeout(resolve, 100));
     
     alert(isEditing ? "Kurz a kvízy byly uloženy." : "Nový kurz a kvízy byly vytvořeny.");
 

@@ -244,6 +244,7 @@ const formData = ref<Course>(defaultFormState());
 
 // ZMĚNA: Funkce initForm nyní kompletně zabije a znovu vytvoří formulář
 const initForm = async () => {
+  console.log("[CourseModal] initForm start, show=", props.show, "course=", props.course?.name);
   // 1. Schováme formulář (zničíme staré inputy v DOMu)
   isFormReady.value = false;
   await nextTick(); 
@@ -288,11 +289,13 @@ const initForm = async () => {
   // 2. Oživíme formulář (vytvoří se nové čisté inputy napojené na data)
   await nextTick();
   isFormReady.value = true;
+  console.log("[CourseModal] initForm done, isFormReady=", isFormReady.value);
 };
 
 watch(
   () => props.show,
   (isOpen) => {
+    console.log("[CourseModal] watch triggered, isOpen=", isOpen);
     if (isOpen) {
       modalKey.value++;
       initForm();
@@ -388,7 +391,7 @@ const confirmQuizDelete = async () => {
   quizIndexToDelete.value = null;
 };
 
-const saveCourse = () => {
+const saveCourse = async () => {
   emit("save", { ...formData.value }, isEditing.value);
 };
 
