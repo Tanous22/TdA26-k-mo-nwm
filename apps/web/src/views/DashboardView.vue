@@ -236,8 +236,8 @@ const saveCourse = async (courseData: Course, isEditing: boolean) => {
     showModal.value = false;
     editingCourse.value = null;
     
-    // Malá pauza aby se stihlo zavření modalu
-    await new Promise(resolve => setTimeout(resolve, 100));
+    // Malá pauza aby se stihlo zavření modalu a resetování formuláře
+    await new Promise(resolve => setTimeout(resolve, 150));
     
     alert(isEditing ? "Kurz a kvízy byly uloženy." : "Nový kurz a kvízy byly vytvořeny.");
 

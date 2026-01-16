@@ -294,10 +294,16 @@ const initForm = async () => {
 
 watch(
   () => props.show,
-  (isOpen) => {
+  async (isOpen) => {
     console.log("[CourseModal] watch triggered, isOpen=", isOpen);
     if (isOpen) {
+      // OPRAVA: Nejdříve resetujeme, pak až inicializujeme
+      isFormReady.value = false;
+      await nextTick();
+      
       modalKey.value++;
+      await nextTick();
+      
       initForm();
     } else {
       // Při zavření pro jistotu taky vyčistíme

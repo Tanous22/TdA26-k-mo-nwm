@@ -44,8 +44,8 @@
                 <p class="text-sm text-gray-500 truncate">{{ mat.description }}</p>
               </div>
               <div>
-                <a v-if="mat.type === 'link'" :href="mat.url" target="_blank" class="text-[#0070BB] font-semibold text-sm hover:underline">Otevřít →</a>
-                <a v-else-if="mat.type === 'file'" :href="`${apiUrl}${mat.fileUrl}`" target="_blank" class="text-[#0070BB] font-semibold text-sm hover:underline">Stáhnout ↓</a>
+                <a v-if="mat.type === 'url'" :href="mat.url" target="_blank" class="text-[#0070BB] font-semibold text-sm hover:underline">Otevřít →</a>
+                <a v-else-if="mat.type === 'file'" :href="`${apiUrl}${mat.fileUrl}`" download class="text-[#0070BB] font-semibold text-sm hover:underline">Stáhnout ↓</a>
               </div>
             </div>
           </div>
@@ -149,8 +149,7 @@ const fetchData = async () => {
       difficulty: data.difficulty || 'Začátečník', 
       materials: (data.materials || []).map((m: any) => ({
         ...m,
-        type: m.type === 'url' ? 'link' : m.type, 
-        url: m.url || m.fileUrl
+        type: m.type === 'url' ? 'url' : m.type
       })),
       quizzes: (data.quizzes || []).map((q: any) => ({
         ...q,
