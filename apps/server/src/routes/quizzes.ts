@@ -259,7 +259,7 @@ quizzesRouter.get("/:quizId", async (req: Request, res: Response) => {
 // PUT - Update kvízu
 // PUT - Update kvízu (Chytrý update: Insert/Update/Delete)
 quizzesRouter.put("/:quizId", async (req: Request, res: Response) => {
-    const { quizId } = req.params;
+    const { quizId, courseId } = req.params;
     const { title, questions } = req.body;
     console.log(`[DEBUG-QUIZ] PUT /${quizId} HIT - Smart Update`);
 
@@ -333,6 +333,32 @@ quizzesRouter.put("/:quizId", async (req: Request, res: Response) => {
         const [countRows] = await pool.execute("SELECT COUNT(*) as count FROM quiz_attempts WHERE quiz_id = ?", [dbQuizId]);
         const count = (countRows as any)[0].count;
 
+        // --- PŘIDÁNO: AUTOMATICKÁ UDÁLOST DO FEEDU PRO UPDATE ---
+        try {
+            const feedUuid = uuidv4();
+            const feedContent = `Kvíz aktualizován: ${title}`;
+
+            // 1. Zápis do DB feedu
+            await pool.execute(
+                "INSERT INTO feed_events (uuid, course_id, type, content, author, created_at, updated_at) VALUES (?, ?, ?, ?, ?, NOW(), NOW())",
+                [feedUuid, 
+                 (await pool.execute("SELECT course_id FROM quizzes WHERE uuid = ?", [quizId]) as any)[0][0].course_id,
+                 "system", feedContent, null]
+            );
+
+            // 2. Odeslání přes SSE
+            broadcastToCourse(courseId, {
+                uuid: feedUuid,
+                type: "system",
+                message: feedContent,
+                createdAt: new Date(),
+                isEdited: false
+            });
+        } catch (feedError) {
+            console.error("[DEBUG-QUIZ] Nepodařilo se zapsat aktualizaci do feedu:", feedError);
+        }
+        // ---------------------------------------------------------------
+
         res.status(200).json({ 
             uuid: quizId, 
             title, 
@@ -348,14 +374,53 @@ quizzesRouter.put("/:quizId", async (req: Request, res: Response) => {
 
 // DELETE
 quizzesRouter.delete("/:quizId", async (req: Request, res: Response) => {
-    const { quizId } = req.params;
+    const { quizId, courseId } = req.params;
     try {
+        // 1. Zjistíme název kvízu PŘED smazáním (pro feed)
+        const [quizRows] = await pool.execute("SELECT title FROM quizzes WHERE uuid = ?", [quizId]);
+        if ((quizRows as any[]).length === 0) {
+            res.status(404).json({ error: "Quiz not found" });
+            return;
+        }
+        const quizTitle = (quizRows as any[])[0].title;
+
+        // 2. Smažeme kvíz
         const [result] = await pool.execute("DELETE FROM quizzes WHERE uuid = ?", [quizId]);
         
         if ((result as any).affectedRows === 0) {
              res.status(404).json({ error: "Quiz not found" });
              return;
         }
+
+        // --- PŘIDÁNO: AUTOMATICKÁ UDÁLOST DO FEEDU PRO DELETE ---
+        try {
+            const feedUuid = uuidv4();
+            const feedContent = `Kvíz smazán: ${quizTitle}`;
+
+            // 1. Zápis do DB feedu
+            const [courseRows] = await pool.execute("SELECT id FROM courses WHERE uuid = ?", [courseId]);
+            if ((courseRows as any[]).length > 0) {
+                const courseIntId = (courseRows as any[])[0].id;
+                
+                await pool.execute(
+                    "INSERT INTO feed_events (uuid, course_id, type, content, author, created_at, updated_at) VALUES (?, ?, ?, ?, ?, NOW(), NOW())",
+                    [feedUuid, courseIntId, "system", feedContent, null]
+                );
+
+                // 2. Odeslání přes SSE
+                broadcastToCourse(courseId, {
+                    uuid: feedUuid,
+                    type: "system",
+                    message: feedContent,
+                    createdAt: new Date(),
+                    isEdited: false
+                });
+            }
+        } catch (feedError) {
+            console.error("[DEBUG-QUIZ] Nepodařilo se zapsat mazání do feedu:", feedError);
+        }
+        // ---------------------------------------------------------------
+
         res.status(204).send();
     } catch (error) {
         console.error("Error deleting quiz:", error);

@@ -187,7 +187,7 @@ materialsRouter.post("/", handleUpload, async (req: Request, res: Response) => {
 // PUT /courses/:courseId/materials/:materialId - Úprava materiálu
 materialsRouter.put("/:materialId", handleUpload, async (req: Request, res: Response) => {
     try {
-        const { materialId } = req.params;
+        const { materialId, courseId } = req.params;
         const { name, description, url } = req.body;
         const file = req.file;
 
@@ -225,11 +225,40 @@ materialsRouter.put("/:materialId", handleUpload, async (req: Request, res: Resp
             [name || currentMaterial.name, description || currentMaterial.description, newContent, newMimeType, materialId]
         );
 
-        // 4. Vrácení aktualizovaných dat
+        const finalName = name || currentMaterial.name;
+
+        // 4. Přidání feed eventu
+        try {
+            const feedUuid = uuidv4();
+            const feedContent = `Materiál aktualizován: ${finalName}`;
+            const [[courseData]] = await pool.execute(
+                "SELECT id FROM courses WHERE uuid = ?",
+                [courseId]
+            );
+            const courseIntId = (courseData as any)?.id;
+            
+            if (courseIntId) {
+                await pool.execute(
+                    "INSERT INTO feed_events (uuid, course_id, type, content, author, created_at, updated_at) VALUES (?, ?, ?, ?, ?, NOW(), NOW())",
+                    [feedUuid, courseIntId, "system", feedContent, null]
+                );
+                broadcastToCourse(courseId, {
+                    uuid: feedUuid,
+                    type: "system",
+                    message: feedContent,
+                    createdAt: new Date(),
+                    isEdited: false
+                });
+            }
+        } catch (feedError) {
+            console.error("[Route] Nepodařilo se zapsat do feedu:", feedError);
+        }
+
+        // 5. Vrácení aktualizovaných dat
         res.json({
             uuid: materialId,
             type: currentMaterial.type,
-            name: name || currentMaterial.name,
+            name: finalName,
             description: description || currentMaterial.description,
             mimeType: newMimeType,
             url: currentMaterial.type === 'url' ? newContent : undefined,
@@ -245,9 +274,21 @@ materialsRouter.put("/:materialId", handleUpload, async (req: Request, res: Resp
 // DELETE /courses/:courseId/materials/:materialId - Smazání materiálu
 materialsRouter.delete("/:materialId", async (req: Request, res: Response) => {
     try {
-        const { materialId } = req.params;
+        const { materialId, courseId } = req.params;
 
-        // Smazání z DB
+        // 1. Získání detailů materiálu PŘED smazáním
+        const [materials] = await pool.execute(
+            "SELECT name, course_id FROM materials WHERE uuid = ?",
+            [materialId]
+        );
+
+        if ((materials as any).length === 0) {
+             res.status(404).json({ error: "Materiál nenalezen" });
+             return;
+        }
+        const materialName = (materials as any)[0].name;
+
+        // 2. Smazání z DB
         const [result] = await pool.execute(
             "DELETE FROM materials WHERE uuid = ?",
             [materialId]
@@ -256,6 +297,33 @@ materialsRouter.delete("/:materialId", async (req: Request, res: Response) => {
         if ((result as any).affectedRows === 0) {
              res.status(404).json({ error: "Materiál nenalezen" });
              return;
+        }
+
+        // 3. Přidání feed eventu
+        try {
+            const feedUuid = uuidv4();
+            const feedContent = `Materiál smazán: ${materialName}`;
+            const [[courseData]] = await pool.execute(
+                "SELECT id FROM courses WHERE uuid = ?",
+                [courseId]
+            );
+            const courseIntId = (courseData as any)?.id;
+            
+            if (courseIntId) {
+                await pool.execute(
+                    "INSERT INTO feed_events (uuid, course_id, type, content, author, created_at, updated_at) VALUES (?, ?, ?, ?, ?, NOW(), NOW())",
+                    [feedUuid, courseIntId, "system", feedContent, null]
+                );
+                broadcastToCourse(courseId, {
+                    uuid: feedUuid,
+                    type: "system",
+                    message: feedContent,
+                    createdAt: new Date(),
+                    isEdited: false
+                });
+            }
+        } catch (feedError) {
+            console.error("[Route] Nepodařilo se zapsat do feedu:", feedError);
         }
 
         res.status(204).send();
