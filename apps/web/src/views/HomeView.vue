@@ -1,19 +1,29 @@
 <template>
   <div class="grid md:grid-cols-2 gap-12 items-center min-h-[70vh]">
     <div class="space-y-8 slide-in-left">
-      <h1 class="text-6xl md:text-7xl font-extrabold leading-tight">
-        Objev svůj <span class="highlight-text">potenciál</span>
+      <div class="inline-block px-4 py-2 bg-[#91F5AD]/20 border-2 border-[#91F5AD] rounded-full mb-4">
+        <span class="text-sm font-bold text-[#0257A5] uppercase tracking-wide">🚀 Moderní vzdělávání</span>
+      </div>
+      <h1 class="text-5xl md:text-7xl font-extrabold leading-tight">
+        Uč se <span class="highlight-text">jinak</span>,
+        <br />uč se <span class="text-[#0070BB]">lépe</span>
       </h1>
-      <p class="text-xl text-gray-600 max-w-lg font-semibold">
-        Žádná nuda, jen čistá praxe. Učení, které tě bude bavit a posune tě dál.
+      <p class="text-xl text-gray-600 max-w-lg font-semibold leading-relaxed">
+        Zapomeň na nudné přednášky. Moderní způsoby učení, které tě skutečně posunou kupředu. Prakticky, zábavně a efektivně.
       </p>
-      <div class="flex gap-4">
+      <div class="flex flex-col sm:flex-row gap-4">
         <router-link
           to="/courses"
-          class="organic-btn !bg-[#1A1A1A] !text-white text-xl px-8 py-3"
+          class="organic-btn !bg-[#0070BB] !text-white text-lg px-8 py-4 shadow-lg hover:shadow-xl transition-shadow"
         >
-          Chci studovat
+          🎯 Prozkoumat kurzy
         </router-link>
+        <a
+          href="#jak-to-funguje"
+          class="organic-btn secondary text-lg px-8 py-4 !bg-white !text-[#0070BB] !border-[#0070BB]"
+        >
+          Jak to funguje?
+        </a>
       </div>
     </div>
     <div class="relative">
