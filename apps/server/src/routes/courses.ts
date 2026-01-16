@@ -4,6 +4,7 @@ import { pool } from "../db/index.js";
 // 1. DŮLEŽITÉ IMPORTY
 import { quizzesRouter } from "./quizzes.js";
 import { materialsRouter } from "./materials.js";
+import { broadcastToCourse } from "./feed.js";
 
 export const coursesRouter = Router();
 
@@ -91,10 +92,36 @@ coursesRouter.post("/", async (req: Request, res: Response) => {
     const uuid = uuidv4();
     const { name, description = "", difficulty = "" } = req.body;
     try {
-        await pool.execute(
+        // 1. Vytvoření kurzu
+        const [result] = await pool.execute(
             "INSERT INTO courses (uuid, name, description, difficulty) VALUES (?, ?, ?, ?)",
             [uuid, name, description, difficulty]
         );
+        const courseId = (result as any).insertId;
+
+        // 2. Automatická zpráva do feedu
+        try {
+            const feedUuid = uuidv4();
+            const feedContent = `Nový kurz: ${name}`;
+
+            // 2a. Zápis do DB feedu
+            await pool.execute(
+                "INSERT INTO feed_events (uuid, course_id, type, content, author, created_at, updated_at) VALUES (?, ?, ?, ?, ?, NOW(), NOW())",
+                [feedUuid, courseId, "system", feedContent, null]
+            );
+
+            // 2b. Odeslání přes SSE
+            broadcastToCourse(uuid, {
+                uuid: feedUuid,
+                type: "system",
+                message: feedContent,
+                createdAt: new Date(),
+                isEdited: false
+            });
+        } catch (feedError) {
+            console.error("[Courses] Nepodařilo se zapsat do feedu:", feedError);
+        }
+
         res.status(201).json({ uuid, name, description, difficulty, materials: [], quizzes: [], feed: [] });
     } catch (error) {
         console.error("Error creating course:", error);
@@ -184,6 +211,7 @@ coursesRouter.put("/:courseId", async (req: Request, res: Response) => {
     const { courseId } = req.params;
     const { name, description, difficulty } = req.body;
     try {
+        // 1. Aktualizace kurzu
         const [result] = await pool.execute(
             "UPDATE courses SET name = ?, description = ?, difficulty = ? WHERE uuid = ?",
             [name, description, difficulty || "", courseId]
@@ -192,6 +220,34 @@ coursesRouter.put("/:courseId", async (req: Request, res: Response) => {
             res.status(404).json({ error: "Not found" });
             return;
         }
+
+        // 2. Automatická zpráva do feedu
+        try {
+            const [courseRows] = await pool.execute("SELECT id FROM courses WHERE uuid = ?", [courseId]);
+            if ((courseRows as any[]).length > 0) {
+                const courseIntId = (courseRows as any[])[0].id;
+                const feedUuid = uuidv4();
+                const feedContent = `Kurz aktualizován: ${name}`;
+
+                // 2a. Zápis do DB feedu
+                await pool.execute(
+                    "INSERT INTO feed_events (uuid, course_id, type, content, author, created_at, updated_at) VALUES (?, ?, ?, ?, ?, NOW(), NOW())",
+                    [feedUuid, courseIntId, "system", feedContent, null]
+                );
+
+                // 2b. Odeslání přes SSE
+                broadcastToCourse(courseId, {
+                    uuid: feedUuid,
+                    type: "system",
+                    message: feedContent,
+                    createdAt: new Date(),
+                    isEdited: false
+                });
+            }
+        } catch (feedError) {
+            console.error("[Courses] Nepodařilo se zapsat aktualizaci do feedu:", feedError);
+        }
+
         res.status(200).json({ uuid: courseId, name, description, difficulty: difficulty || "", materials: [], quizzes: [], feed: [] });
     } catch (error) {
         console.error("Error updating course:", error);

@@ -78,6 +78,8 @@
             </div>
           </div>
         </div>
+
+        <FeedPanel :courseId="courseId" />
       </div>
     </div>
 
@@ -104,6 +106,7 @@ import { useRoute } from 'vue-router';
 import QuizRunner, { type Quiz } from '../components/QuizRunner.vue';
 import QuizModal from '../components/QuizModal.vue';
 import ConfirmationModal from '../components/ConfirmationModal.vue';
+import FeedPanel from '../components/FeedPanel.vue';
 import { useAuth } from '../composables/useAuth';
 
 const route = useRoute();
