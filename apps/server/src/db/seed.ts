@@ -85,6 +85,36 @@ async function seed() {
     );
     console.log("   -> Otázky vloženy");
 
+    // E) Materiály (URL a soubor)
+    await pool.execute(
+      `INSERT INTO materials (uuid, course_id, type, name, description, content, mime_type, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, NOW(), NOW())`,
+      [
+        uuidv4(),
+        courseId,
+        "url",
+        "MDN Web Docs - JavaScript",
+        "Oficiální dokumentace JavaScriptu",
+        "https://developer.mozilla.org/en-US/docs/Web/JavaScript/",
+        null
+      ]
+    );
+
+    await pool.execute(
+      `INSERT INTO materials (uuid, course_id, type, name, description, content, mime_type, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, NOW(), NOW())`,
+      [
+        uuidv4(),
+        courseId,
+        "file",
+        "Přípravný materiál.pdf",
+        "PDF se základními pojmy",
+        "sample-material.pdf",
+        "application/pdf"
+      ]
+    );
+    console.log("   -> Materiály vloženy");
+
     console.log("✅ HOTOVO! Databáze je čistá a naplněná.");
     process.exit(0);
 

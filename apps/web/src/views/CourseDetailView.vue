@@ -130,7 +130,7 @@ const quizIdToDelete = ref<string | null>(null);
 const isTeacher = computed(() => user.value?.name?.toLowerCase().includes('lektor') || user.value?.email === 'lektor@example.com');
 
 const getMaterialIcon = (mat: any) => {
-  if (mat.type === 'link') return '🔗'; 
+  if (mat.type === 'url') return '🔗'; 
   if (mat.mimeType?.includes('pdf')) return '📄';
   return '📁';
 };
@@ -143,14 +143,19 @@ const fetchData = async () => {
     const response = await fetch(`${apiUrl}/courses/${courseId}`);
     if (!response.ok) throw new Error('Failed to fetch course');
     const data = await response.json();
+    console.log("[CourseDetail] Fetched data:", data);
+    console.log("[CourseDetail] Materials from backend:", data.materials);
     
     course.value = {
       ...data,
       difficulty: data.difficulty || 'Začátečník', 
-      materials: (data.materials || []).map((m: any) => ({
-        ...m,
-        type: m.type === 'url' ? 'url' : m.type
-      })),
+      materials: (data.materials || []).map((m: any) => {
+        console.log("[CourseDetail] Mapping material:", m);
+        return {
+          ...m,
+          type: m.type === 'url' ? 'url' : m.type
+        };
+      }),
       quizzes: (data.quizzes || []).map((q: any) => ({
         ...q,
         attemptsCount: q.attemptsCount || 0,
@@ -168,6 +173,7 @@ const fetchData = async () => {
         }))
       }))
     };
+    console.log("[CourseDetail] Final course.value:", course.value);
   } catch (e) {
     console.error('Error fetching course:', e);
   } finally {

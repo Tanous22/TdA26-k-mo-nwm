@@ -304,7 +304,7 @@ watch(
       modalKey.value++;
       await nextTick();
       
-      initForm();
+      await initForm();  // OPRAVA: Await tady aby se počkalo na inicializaci
     } else {
       // Při zavření pro jistotu taky vyčistíme
       isFormReady.value = false;
