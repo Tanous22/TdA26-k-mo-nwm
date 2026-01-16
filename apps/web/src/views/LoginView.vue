@@ -85,7 +85,7 @@ const handleLogin = () => {
     loginForm.password.trim() === "TdA26!"
   ) {
     authLogin({
-      uuid: "teacher-1",
+      id: "teacher-1", // OPRAVENO: uuid -> id
       name: "Lektor",
       email: "lecturer@tdacademy.cz",
       role: "teacher",

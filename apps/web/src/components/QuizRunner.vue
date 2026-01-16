@@ -105,6 +105,7 @@ export interface Quiz {
   title: string
   questions: Question[]
   attempts?: number
+  attemptsCount?: number
 }
 </script>
 

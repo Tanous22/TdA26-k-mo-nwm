@@ -1,7 +1,6 @@
 <template>
   <div>
     <div class="flex flex-col md:flex-row gap-8 mb-12">
-      <!-- Sidebar -->
       <aside class="md:w-1/4 space-y-8 sticky top-24 h-fit">
         <div>
           <input
@@ -31,7 +30,6 @@
         </div>
       </aside>
 
-      <!-- Course Grid -->
       <div class="md:w-3/4 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-10 pb-12">
         <div v-if="loading" class="col-span-full text-center text-gray-500 font-bold">
           Načítání kurzů...
@@ -61,10 +59,20 @@ import { useRouter } from 'vue-router'
 import CourseCard from '../components/CourseCard.vue'
 import { useNotifications } from '../composables/useNotifications'
 import { useApi } from '../composables/useApi'
-import type { Course } from '../composables/useModels'
+
+// Lokální definice rozhraní upravená pro striktní shodu s CourseCard
+interface Course {
+  uuid: string
+  name: string
+  description: string
+  difficulty?: string
+  category?: string
+  materials: any[] // ZMĚNA: Odstraněn otazník (povinné pole)
+  quizzes: any[]   // ZMĚNA: Odstraněn otazník (povinné pole)
+}
 
 const router = useRouter()
-const { get, API_URL } = useApi()
+const { API_URL } = useApi()
 const { error: showError } = useNotifications()
 
 const searchQuery = ref('')
