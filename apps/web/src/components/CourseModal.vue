@@ -46,9 +46,10 @@
                 v-model="formData.difficulty"
                 class="organic-select bg-white"
               >
-                <option value="Začátečník">Začátečník 🟢</option>
-                <option value="Pokročilý">Pokročilý 🟡</option>
-                <option value="Expert">Expert 🔴</option>
+                <option value="Jednoduchý">Jednoduchý 💡</option>
+                <option value="Střední">Střední ⚡</option>
+                <option value="Těžký">Těžký 🔥</option>
+                <option value="Extrém">Extrém ☠️</option>
               </select>
             </div>
           </div>
@@ -234,7 +235,7 @@ const defaultFormState = (): Course => ({
   name: "",
   description: "",
   category: "Programování",
-  difficulty: "Začátečník",
+  difficulty: "Jednoduchý",
   materials: [],
 });
 

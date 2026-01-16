@@ -23,7 +23,7 @@ export async function initDatabase() {
         uuid VARCHAR(36) NOT NULL UNIQUE,
         name VARCHAR(255) NOT NULL,
         description TEXT,
-        difficulty VARCHAR(50) DEFAULT 'Začátečník',
+        difficulty VARCHAR(50) DEFAULT 'Jednoduchý',
         category VARCHAR(100) DEFAULT 'Programování',
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP

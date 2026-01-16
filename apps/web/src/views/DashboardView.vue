@@ -50,13 +50,18 @@
           <div class="flex justify-between items-start mb-1">
             <h4 class="text-xl font-bold">{{ course.name }}</h4>
             <span
-              class="px-3 py-1 rounded-full text-xs font-bold border border-gray-200"
+              class="px-3 py-1 rounded-full text-xs font-bold border border-gray-200 flex items-center gap-1"
               :style="{
                 backgroundColor: getDifficultyColor(course.difficulty) + '40',
                 color: '#1A1A1A',
               }"
             >
-              {{ course.difficulty || "Začátečník" }}
+              <img 
+                :src="getDifficultyIcon(course.difficulty)" 
+                alt="" 
+                class="w-4 h-4"
+              />
+              {{ course.difficulty || "Jednoduchý" }}
             </span>
           </div>
           <p class="text-gray-500 text-sm mb-3 line-clamp-2">
@@ -130,10 +135,19 @@ const loading = ref(true);
 const error = ref("");
 
 const getDifficultyColor = (diff?: string) => {
-  if (diff === "Začátečník") return "#91F5AD";
-  if (diff === "Pokročilý") return "#FFD93D";
-  if (diff === "Expert") return "#FF6B6B";
+  if (diff === "Jednoduchý") return "#91F5AD";
+  if (diff === "Střední") return "#FFD93D";
+  if (diff === "Těžký") return "#FF6B6B";
+  if (diff === "Extrém") return "#8B00FF";
   return "#F9F9F9";
+};
+
+const getDifficultyIcon = (diff?: string) => {
+  if (diff === "Jednoduchý") return new URL('../assets/icons/easy.svg', import.meta.url).href;
+  if (diff === "Střední") return new URL('../assets/icons/medium.svg', import.meta.url).href;
+  if (diff === "Těžký") return new URL('../assets/icons/hard.svg', import.meta.url).href;
+  if (diff === "Extrém") return new URL('../assets/icons/extreme.svg', import.meta.url).href;
+  return new URL('../assets/icons/easy.svg', import.meta.url).href;
 };
 
 const fetchCourses = async () => {
@@ -147,7 +161,7 @@ const fetchCourses = async () => {
     courses.value = data.map((course: Course, index: number) => ({
       ...course,
       difficulty:
-        course.difficulty || ["Začátečník", "Pokročilý", "Expert"][index % 3],
+        course.difficulty || ["Jednoduchý", "Střední", "Těžký", "Extrém"][index % 4],
       color: ["#91F5AD", "#0070BB", "#FF6B6B", "#FFD93D"][index % 4],
       category: course.category || "Programování",
     }));
