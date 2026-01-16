@@ -58,14 +58,20 @@ coursesRouter.get("/", async (req: Request, res: Response) => {
 
             // Fetch quizzes for this course
             const [quizRows] = await pool.execute(
-                `SELECT * FROM quizzes WHERE course_id = ?`,
+                `SELECT q.*, (SELECT COUNT(*) FROM quiz_attempts qa WHERE qa.quiz_id = q.id) as attemptsCount FROM quizzes q WHERE q.course_id = ?`,
                 [row.id]
             );
-            const quizzes = (quizRows as any[]).map(q => ({
-                uuid: q.uuid,
-                title: q.title,
-                questions: []
-            }));
+            const quizzes = [];
+            for (const qRow of (quizRows as any[])) {
+                const [questionRows] = await pool.execute("SELECT * FROM quiz_questions WHERE quiz_id = ?", [qRow.id]);
+                const questions = (questionRows as any[]).map(q => {
+                    const options = parseJson(q.options);
+                    const correctAnswer = parseJson(q.correct_answer);
+                    const base = { uuid: q.uuid, type: q.type, question: q.question, options };
+                    return q.type === 'singleChoice' ? { ...base, correctIndex: correctAnswer } : { ...base, correctIndices: correctAnswer };
+                });
+                quizzes.push({ uuid: qRow.uuid, title: qRow.title, attemptsCount: qRow.attemptsCount || 0, questions });
+            }
 
             courses.push({
                 uuid: row.uuid,

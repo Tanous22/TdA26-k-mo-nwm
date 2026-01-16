@@ -66,12 +66,10 @@
 <script setup lang="ts">
 import { ref, reactive } from "vue";
 import { useRouter } from "vue-router";
-
-const emit = defineEmits<{
-  login: [user: { name: string; role: string }];
-}>();
+import { useAuth } from "../composables/useAuth";
 
 const router = useRouter();
+const { login: authLogin } = useAuth();
 const loginError = ref("");
 const loginForm = reactive({
   username: "",
@@ -86,8 +84,12 @@ const handleLogin = () => {
     loginForm.username.trim() === "lecturer" &&
     loginForm.password.trim() === "TdA26!"
   ) {
-    const user = { name: "Lektor", role: "admin" };
-    emit("login", user);
+    authLogin({
+      uuid: "teacher-1",
+      name: "Lektor",
+      email: "lecturer@tdacademy.cz",
+      role: "teacher",
+    });
     router.push("/dashboard");
   } else {
     loginError.value = "Chybné jméno nebo heslo. Zkus to znovu.";

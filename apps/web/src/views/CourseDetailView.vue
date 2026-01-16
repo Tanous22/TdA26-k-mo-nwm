@@ -336,7 +336,13 @@ const closeQuizModal = () => {
 }
 
 const startQuiz = (quiz: any) => {
-  activeQuiz.value = quiz
+  const formattedQuestions = (quiz.questions || []).map(
+    transformQuestionToFrontend
+  )
+  activeQuiz.value = {
+    ...quiz,
+    questions: formattedQuestions,
+  }
 }
 
 const editQuiz = async (quiz: any) => {

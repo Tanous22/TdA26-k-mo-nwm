@@ -29,7 +29,7 @@ const routes: RouteRecordRaw[] = [
     path: '/dashboard',
     name: 'dashboard',
     component: DashboardView,
-    meta: { requiresAuth: true }
+    meta: { requiresAuth: true, requiresTeacher: true }
   }
 ]
 
@@ -41,11 +41,24 @@ const router = createRouter({
 // Navigation guard to protect authenticated routes
 router.beforeEach((to, _from, next) => {
   const requiresAuth = to.meta.requiresAuth
+  const requiresTeacher = to.meta.requiresTeacher
   const user = localStorage.getItem('user')
 
   if (requiresAuth && !user) {
     // Redirect to login if trying to access protected route without being logged in
     next('/login')
+  } else if (requiresTeacher && user) {
+    try {
+      const userData = JSON.parse(user)
+      const isTeacher = userData.role === 'teacher' || userData.role === 'admin'
+      if (!isTeacher) {
+        next('/courses')
+      } else {
+        next()
+      }
+    } catch {
+      next('/login')
+    }
   } else {
     next()
   }

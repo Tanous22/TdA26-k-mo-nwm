@@ -22,7 +22,7 @@
         Kurzy
       </router-link>
       <router-link
-        v-if="user"
+        v-if="user && isTeacher"
         to="/dashboard"
         :class="navLinkClass('dashboard')"
       >
@@ -30,7 +30,13 @@
       </router-link>
     </nav>
 
-    <div class="flex gap-4">
+    <div class="flex gap-4 items-center">
+      <span v-if="user" class="text-sm text-gray-600 font-semibold">
+        {{ user.name }}
+        <span v-if="isTeacher" class="text-xs bg-[#91F5AD] text-[#1A1A1A] px-2 py-1 rounded-full ml-2">
+          Lektor
+        </span>
+      </span>
       <router-link
         v-if="!user"
         to="/login"
@@ -50,17 +56,12 @@
 </template>
 
 <script setup lang="ts">
-import { useRoute } from "vue-router";
-
-defineProps<{
-  user: { name: string; role: string } | null;
-}>();
-
-const emit = defineEmits<{
-  logout: [];
-}>();
+import { useRoute, useRouter } from "vue-router";
+import { useAuth } from "../composables/useAuth";
 
 const route = useRoute();
+const router = useRouter();
+const { user, isTeacher, logout: authLogout } = useAuth();
 
 const navLinkClass = (viewName: string) => {
   const base =
@@ -70,8 +71,9 @@ const navLinkClass = (viewName: string) => {
   return `${base} text-[#1A1A1A] hover:text-[#0070BB]`;
 };
 
-const logout = () => {
-  emit("logout");
+const logout = async () => {
+  await authLogout();
+  router.push("/login");
 };
 </script>
 

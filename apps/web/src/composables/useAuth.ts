@@ -24,8 +24,7 @@ export function useAuth() {
     const isAuthenticated = computed(() => user.value !== null)
     
     const isTeacher = computed(() =>
-        user.value?.name?.toLowerCase().includes('lektor') || 
-        user.value?.email === 'lektor@example.com'
+        user.value?.role === 'teacher' || user.value?.role === 'admin'
     )
 
     const initializeFromStorage = () => {

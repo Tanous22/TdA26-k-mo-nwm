@@ -3,14 +3,14 @@
     <div class="text-center mb-8">
       <h3 class="text-2xl font-bold text-gray-900 mb-2">{{ quiz.title }}</h3>
       <p class="text-gray-500 text-sm">
-        {{ quiz.questions.length }} otázek • Vyplněno {{ quiz.attempts || 0 }}×
+        {{ quiz.questions.length }} otázek • Vyplněno {{ quiz.attemptsCount || 0 }}×
       </p>
     </div>
 
     <div v-if="!submitted" class="space-y-8">
       <div
         v-for="(question, qIndex) in quiz.questions"
-        :key="question.id"
+        :key="question.uuid"
         class="bg-gray-50 p-6 rounded-xl border-2 border-gray-200"
       >
         <h4 class="text-lg font-bold text-gray-800 mb-4 flex gap-2">
@@ -24,11 +24,11 @@
         <div class="space-y-3">
           <div
             v-for="(option, oIndex) in question.options"
-            :key="option.id"
-            @click="toggleAnswer(question.id, oIndex, question.type)"
+            :key="oIndex"
+            @click="toggleAnswer(question.uuid, oIndex, question.type)"
             class="p-4 rounded-lg border-2 cursor-pointer transition-all flex items-center gap-3 relative"
             :class="[
-              isSelected(question.id, oIndex)
+              isSelected(question.uuid, oIndex)
                 ? 'bg-[#0070BB] border-[#0070BB] text-white shadow-md'
                 : 'bg-white border-gray-200 hover:border-gray-300 text-gray-700'
             ]"
@@ -37,10 +37,10 @@
               class="w-6 h-6 rounded border-2 flex items-center justify-center flex-shrink-0 transition-colors"
               :class="[
                 question.type === 'single' ? 'rounded-full' : 'rounded-md',
-                isSelected(question.id, oIndex) ? 'border-white bg-white/20' : 'border-gray-300'
+                isSelected(question.uuid, oIndex) ? 'border-white bg-white/20' : 'border-gray-300'
               ]"
             >
-              <span v-if="isSelected(question.id, oIndex)" class="text-white font-bold text-sm">✓</span>
+              <span v-if="isSelected(question.uuid, oIndex)" class="text-white font-bold text-sm">✓</span>
             </div>
             
             <span class="font-medium">{{ option.text }}</span>
@@ -69,7 +69,10 @@
         <div class="text-6xl mb-4">🎉</div>
         <h3 class="text-3xl font-bold mb-2">Hotovo!</h3>
         <p class="text-xl opacity-90">
-          Dosáhli jste <strong>{{ score }}</strong> z {{ quiz.questions.length }} bodů
+          Dosáhli jste <strong>{{ score }}/{{ result?.maxScore || quiz.questions.length }}</strong> bodů
+        </p>
+        <p class="text-lg opacity-85 mt-2">
+          <strong>{{ Math.round((score / (result?.maxScore || quiz.questions.length)) * 100) }}%</strong>
         </p>
       </div>
 
@@ -90,7 +93,7 @@ export interface Option {
 }
 
 export interface Question {
-  id: string
+  uuid: string
   text: string
   type: 'single' | 'multiple'
   options: Option[]
@@ -156,17 +159,17 @@ const submitQuiz = async () => {
     const payload = {
       answers: props.quiz.questions
         .map((q) => {
-          const userAns = answers.value[q.id]
+          const userAns = answers.value[q.uuid]
           if (!userAns || userAns.length === 0) return null
 
           if (q.type === 'single') {
             return {
-              uuid: q.id,
+              uuid: q.uuid,
               selectedIndex: userAns[0],
             }
           } else {
             return {
-              uuid: q.id,
+              uuid: q.uuid,
               selectedIndices: userAns,
             }
           }
