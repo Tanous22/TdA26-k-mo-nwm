@@ -203,6 +203,7 @@ interface QuizQuestion {
 }
 
 export interface Quiz {
+  uuid?: string; // --- ZMĚNA 1: Přidáno pole pro UUID
   title: string;
   questions: QuizQuestion[];
 }
@@ -227,6 +228,7 @@ const quizData = ref<Quiz>({
 
 const resetForm = () => {
   quizData.value = {
+    // uuid undefined = nový kvíz
     title: "",
     questions: [
       {
@@ -277,7 +279,8 @@ watch(() => props.show, (isOpen) => {
           }
 
           return {
-            id: crypto.randomUUID(),
+            id: crypto.randomUUID(), // Interní ID pro Vue for-loop (neřeší backend)
+            uuid: q.uuid, // Zde bychom mohli zachovat UUID otázky, pokud bychom chtěli být extra přesní, ale pro DUPLICATE QUIZ bug to není kritické.
             text: q.question || q.text || "",
             type: type,
             options: options
@@ -285,6 +288,7 @@ watch(() => props.show, (isOpen) => {
         });
 
         quizData.value = {
+          uuid: sourceData.uuid, // --- ZMĚNA 2: Tady si pamatujeme ID kvízu!
           title: sourceData.title || "",
           questions: mappedQuestions
         };
@@ -338,11 +342,9 @@ const removeOption = (qIndex: number, oIndex: number) => {
   }
 };
 
-// ZMĚNA ZDE: Přidána kontrola existence otázky
 const handleTypeChange = (qIndex: number) => {
   const question = quizData.value.questions[qIndex];
   if (question && question.type === 'single') {
-    // Reset - první bude správně, ostatní ne
     question.options.forEach((opt, i) => opt.isCorrect = (i === 0));
   }
 };
@@ -392,6 +394,7 @@ const saveQuiz = () => {
   if (!validateQuiz()) {
       return;
   }
+  // Při odesílání se nyní pošle i UUID, pokud existuje
   emit("save", JSON.parse(JSON.stringify(quizData.value)));
   errorMessage.value = null;
 };
