@@ -46,10 +46,10 @@
                 v-model="formData.difficulty"
                 class="organic-select bg-white"
               >
-                <option value="Jednoduchý">Jednoduchý 💡</option>
-                <option value="Střední">Střední ⚡</option>
-                <option value="Těžký">Těžký 🔥</option>
-                <option value="Extrém">Extrém ☠️</option>
+                <option value="Jednoduchý">Jednoduchý</option>
+                <option value="Střední">Střední</option>
+                <option value="Těžký">Těžký</option>
+                <option value="Extrém">Extrém</option>
               </select>
             </div>
           </div>

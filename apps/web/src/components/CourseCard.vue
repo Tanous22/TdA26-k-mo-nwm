@@ -5,7 +5,7 @@
     :style="{ transform: `rotate(${index % 2 === 0 ? '-2deg' : '2deg'})` }"
   >
     <div class="hand-note" :style="{ backgroundColor: difficultyColor }">
-      {{ course.difficulty || 'Začátečník' }}
+      {{ course.difficulty || 'Jednoduchý' }}
     </div>
 
     <div
@@ -49,7 +49,7 @@ defineEmits<{
 }>()
 
 const difficultyColor = computed(() =>
-  getDifficultyColor(props.course.difficulty || 'Začátečník')
+  getDifficultyColor(props.course.difficulty || 'Jednoduchý')
 )
 </script>
 

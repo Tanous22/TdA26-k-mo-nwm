@@ -105,19 +105,6 @@ export async function initDatabase() {
       )
     `);
 
-    // Seed default usera
-    const [rows] = await pool.execute("SELECT COUNT(*) AS count FROM users");
-    const count = (rows as any)[0].count as number;
-
-    if (count === 0) {
-      await pool.execute(
-        "INSERT INTO users (email, name) VALUES (?, ?)",
-        ["test@example.com", "Test User"]
-      );
-      console.log("Inserted sample user into 'users' table");
-    }
-
-    console.log("Database schema initialized successfully!");
   } catch (error) {
     console.error("CRITICAL: Error initializing database:", error);
   }

@@ -54,9 +54,10 @@ export function getMaterialIcon(material: Material): string {
 }
 
 export function getDifficultyColor(difficulty?: string): string {
-    if (difficulty === 'Začátečník') return '#91F5AD'
-    if (difficulty === 'Pokročilý') return '#FFD93D'
-    if (difficulty === 'Expert') return '#FF6B6B'
+    if (difficulty === 'Jednoduchý') return '#91F5AD'
+    if (difficulty === 'Střední') return '#FFD93D'
+    if (difficulty === 'Těžký') return '#FF6B6B'
+    if (difficulty === 'Extrém') return '#8B00FF'
     return '#F9F9F9'
 }
 

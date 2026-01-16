@@ -109,7 +109,7 @@ const fetchCourses = async () => {
       name: course.name,
       description: course.description,
       difficulty:
-        course.difficulty || ['Začátečník', 'Pokročilý', 'Expert'][index % 3],
+        course.difficulty || ['Jednoduchý', 'Střední', 'Těžký', 'Extrém'][index % 4],
       category: course.category || categories[1 + (index % 4)],
       materials: course.materials || [],
       quizzes: course.quizzes || [],
