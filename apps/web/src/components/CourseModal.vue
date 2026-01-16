@@ -157,7 +157,7 @@
         </form>
         
         <div v-else class="text-center py-10 text-gray-500 font-bold">
-           Načítání editoru...
+           Načítání editoru... (Pokud toto vidíte dlouho, nastala chyba v datech kurzu)
         </div>
       </div>
 
@@ -240,50 +240,73 @@ const defaultFormState = (): Course => ({
 
 const formData = ref<Course>(defaultFormState());
 
+// ZMĚNA: Robustní inicializace v try-catch-finally
 const initForm = async () => {
-  console.log("[CourseModal] initForm start, show=", props.show, "course=", props.course?.name);
-  isFormReady.value = false;
-  await nextTick(); 
-  
-  if (props.course) {
-      isEditing.value = true;
-      const safeCourse = JSON.parse(JSON.stringify(props.course));
+  try {
+      console.log("[CourseModal] initForm start");
+      // 1. Schováme formulář
+      isFormReady.value = false;
+      await nextTick(); 
       
-      const mergedMaterials = safeCourse.materials || [];
-      if (safeCourse.quizzes && safeCourse.quizzes.length > 0) {
-          safeCourse.quizzes.forEach((q: any) => {
-              const exists = mergedMaterials.some((m: any) => m.type === 'quiz' && (m.uuid === q.uuid || (m.data && m.data.uuid === q.uuid)));
-              if (!exists) {
-                  mergedMaterials.push({
-                      type: 'quiz',
-                      value: q.title,
-                      data: q,
-                      uuid: q.uuid
-                  } as Material);
-              }
-          });
+      if (props.course) {
+          isEditing.value = true;
+          // Deep clone
+          const safeCourse = JSON.parse(JSON.stringify(props.course));
+          
+          const mergedMaterials = safeCourse.materials || [];
+          
+          // Pokud kurz má kvízy, přidáme je do materiálů (pokud tam už nejsou)
+          if (safeCourse.quizzes && safeCourse.quizzes.length > 0) {
+              safeCourse.quizzes.forEach((q: any) => {
+                  if (!q) return; // Pojistka
+                  
+                  // ZMĚNA: Kontrola m && m.type, aby to nespadlo na null
+                  const exists = mergedMaterials.some((m: any) => 
+                      m && m.type === 'quiz' && (m.uuid === q.uuid || (m.data && m.data.uuid === q.uuid))
+                  );
+                  
+                  if (!exists) {
+                      mergedMaterials.push({
+                          type: 'quiz',
+                          value: q.title || "Kvíz bez názvu",
+                          data: q,
+                          uuid: q.uuid
+                      } as Material);
+                  }
+              });
+          }
+
+          // Vyčištění null materiálů
+          const cleanMaterials = mergedMaterials.filter((m: any) => m !== null && m !== undefined);
+
+          formData.value = {
+            uuid: safeCourse.uuid,
+            name: safeCourse.name || "",
+            description: safeCourse.description || "",
+            category: safeCourse.category || "Programování",
+            difficulty: safeCourse.difficulty || "Začátečník",
+            materials: cleanMaterials
+          };
+      } else {
+          isEditing.value = false;
+          formData.value = defaultFormState();
       }
+      
+      newMaterialInput.value = "";
+      urlError.value = null;
+      tempFile.value = null;
+      materialType.value = "url";
 
-      formData.value = {
-        uuid: safeCourse.uuid,
-        name: safeCourse.name,
-        description: safeCourse.description,
-        category: safeCourse.category || "Programování",
-        difficulty: safeCourse.difficulty || "Začátečník",
-        materials: mergedMaterials
-      };
-  } else {
-      isEditing.value = false;
+  } catch (error) {
+      console.error("[CourseModal] CRITICAL ERROR IN initForm:", error);
+      // Fallback - inicializujeme prázdný formulář, aby se UI nezaseklo
       formData.value = defaultFormState();
+  } finally {
+      // 2. Vždy zobrazíme formulář
+      await nextTick();
+      isFormReady.value = true;
+      console.log("[CourseModal] initForm done, isFormReady=true");
   }
-  
-  newMaterialInput.value = "";
-  urlError.value = null;
-  tempFile.value = null;
-  materialType.value = "url";
-
-  await nextTick();
-  isFormReady.value = true;
 };
 
 watch(
@@ -350,46 +373,35 @@ const addMaterial = () => {
   }
 };
 
-// --- UPRAVENÁ FUNKCE: Mazání materiálu přes DELETE API ---
 const removeMaterial = async (index: number) => {
   if (!formData.value.materials) return;
   
   const material = formData.value.materials[index];
   if (!material) return;
 
-  // Pokud je to Kvíz, použijeme starou logiku s modálem (nebo přes API v confirmQuizDelete)
   if (material.type === 'quiz') {
     quizIndexToDelete.value = index;
     showQuizDeleteModal.value = true;
     return;
   }
   
-  // Pokud je to existující soubor/link (má UUID), smažeme ho ze serveru
   if (material.uuid) {
-      if(!confirm(`Opravdu chcete smazat materiál "${material.value}"? Tato akce je nevratná.`)) {
-          return;
-      }
+      if(!confirm(`Opravdu chcete smazat materiál "${material.value}"?`)) return;
       
       try {
-          // DELETE /courses/:courseId/materials/:materialId
-          // Předpokládáme, že známe courseId (formData.value.uuid)
           if (!formData.value.uuid) throw new Error("Chybí ID kurzu.");
-
           const response = await fetch(`${apiUrl}/courses/${formData.value.uuid}/materials/${material.uuid}`, {
               method: 'DELETE'
           });
-
           if (!response.ok) throw new Error("Chyba při mazání na serveru.");
-          
           alert("Materiál byl smazán.");
       } catch (e) {
           console.error("Chyba DELETE material:", e);
           alert("Nepodařilo se smazat materiál ze serveru.");
-          return; // Nemažeme lokálně, pokud selhal server
+          return; 
       }
   }
 
-  // Smazat lokálně (buď byl smazán na serveru, nebo to byl jen draft)
   formData.value.materials.splice(index, 1);
 };
 
@@ -423,52 +435,60 @@ const close = () => {
   emit("close");
 };
 
+// ZMĚNA: Bezpečnější načítání kvízu
 const openQuizModal = async (index: number | null = null) => {
-  editingQuizIndex.value = index;
-  
-  if (index !== null && formData.value.materials) {
-      const mat = formData.value.materials[index];
+  try {
+      editingQuizIndex.value = index;
       
-      if (mat && mat.type === 'quiz' && mat.uuid && formData.value.uuid) {
-          try {
-             const res = await fetch(`${apiUrl}/courses/${formData.value.uuid}/quizzes/${mat.uuid}`);
-             if (res.ok) {
-                 const detailedQuiz = await res.json();
-                 mat.data = detailedQuiz; 
-             }
-          } catch (e) {
-             console.error("[CourseModal] Error fetching quiz:", e);
+      if (index !== null && formData.value.materials) {
+          const mat = formData.value.materials[index];
+          
+          if (mat && mat.type === 'quiz' && mat.uuid && formData.value.uuid) {
+              try {
+                 const res = await fetch(`${apiUrl}/courses/${formData.value.uuid}/quizzes/${mat.uuid}`);
+                 if (res.ok) {
+                     const detailedQuiz = await res.json();
+                     mat.data = detailedQuiz; 
+                 }
+              } catch (e) {
+                 console.error("[CourseModal] Error fetching quiz details:", e);
+              }
           }
-      }
 
-      if (mat && mat.type === 'quiz' && mat.data) {
-          const rawData = JSON.parse(JSON.stringify(mat.data));
-          if (rawData.questions) {
-             rawData.questions = rawData.questions.map((q: any) => {
-                if (q.options && typeof q.options[0] === 'object') return q;
+          if (mat && mat.type === 'quiz' && mat.data) {
+              const rawData = JSON.parse(JSON.stringify(mat.data));
+              if (rawData.questions) {
+                 // Bezpečný mapping
+                 rawData.questions = rawData.questions.map((q: any) => {
+                    if (!q) return null;
+                    if (q.options && typeof q.options[0] === 'object') return q;
 
-                return {
-                    uuid: q.uuid,
-                    text: q.question || q.text,
-                    type: q.type === 'singleChoice' ? 'single' : 'multiple', 
-                    options: (q.options || []).map((opt: string, i: number) => ({
-                        text: opt,
-                        isCorrect: q.type === 'singleChoice' 
-                            ? q.correctIndex === i 
-                            : (q.correctIndices || []).includes(i)
-                    }))
-                };
-             });
+                    return {
+                        uuid: q.uuid,
+                        text: q.question || q.text || "",
+                        type: q.type === 'singleChoice' ? 'single' : 'multiple', 
+                        options: (q.options || []).map((opt: string, i: number) => ({
+                            text: opt,
+                            isCorrect: q.type === 'singleChoice' 
+                                ? q.correctIndex === i 
+                                : (q.correctIndices || []).includes(i)
+                        }))
+                    };
+                 }).filter((q: any) => q !== null);
+              }
+              currentQuizData.value = rawData;
+          } else {
+              currentQuizData.value = null;
           }
-          currentQuizData.value = rawData;
       } else {
           currentQuizData.value = null;
       }
-  } else {
-      currentQuizData.value = null;
+      
+      showQuizModal.value = true;
+  } catch (err) {
+      console.error("[CourseModal] Error in openQuizModal:", err);
+      alert("Chyba při otevírání kvízu. Zkontrolujte konzoli.");
   }
-  
-  showQuizModal.value = true;
 };
 
 const handleQuizSave = (quiz: any) => {
