@@ -24,6 +24,7 @@ export async function initDatabase() {
         name VARCHAR(255) NOT NULL,
         description TEXT,
         difficulty VARCHAR(50) DEFAULT 'Začátečník',
+        category VARCHAR(100) DEFAULT 'Programování',
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
       )

@@ -88,7 +88,7 @@
                 </a>
                 <a
                   v-else-if="mat.type === 'file'"
-                  :href="`${API_URL}${mat.fileUrl}`"
+                  :href="mat.fileUrl"
                   download
                   class="text-[#0070BB] font-semibold text-sm hover:underline"
                 >

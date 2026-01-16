@@ -478,18 +478,30 @@ const openQuizModal = async (index: number | null = null) => {
                  // Bezpečný mapping
                  rawData.questions = rawData.questions.map((q: any) => {
                     if (!q) return null;
-                    if (q.options && typeof q.options[0] === 'object') return q;
-
-                    return {
-                        uuid: q.uuid,
-                        text: q.question || q.text || "",
-                        type: q.type === 'singleChoice' ? 'single' : 'multiple', 
-                        options: (q.options || []).map((opt: string, i: number) => ({
+                    
+                    // OPRAVA: Vždy normalizuj text otázky, i když options jsou objekty
+                    const questionText = q.question || q.text || "";
+                    const questionType = q.type === 'singleChoice' ? 'single' : 'multiple';
+                    
+                    // Pokud jsou options už objekty, zachovej je
+                    let options;
+                    if (q.options && typeof q.options[0] === 'object') {
+                        options = q.options;
+                    } else {
+                        // Jinak je zmapuj z pole stringů
+                        options = (q.options || []).map((opt: string, i: number) => ({
                             text: opt,
                             isCorrect: q.type === 'singleChoice' 
                                 ? q.correctIndex === i 
                                 : (q.correctIndices || []).includes(i)
-                        }))
+                        }));
+                    }
+
+                    return {
+                        uuid: q.uuid,
+                        text: questionText,
+                        type: questionType,
+                        options: options
                     };
                  }).filter((q: any) => q !== null);
               }

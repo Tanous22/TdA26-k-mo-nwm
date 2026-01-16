@@ -13,15 +13,18 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
+// Serve static files from uploads directory
+app.use('/uploads', express.static('uploads'));
+
 // --- TOTÁLNÍ DEBUG LOGOVÁNÍ ---
 app.use((req, res, next) => {
-    console.log(`\n------------------------------------------------`);
-    console.log(`[SERVER PŘIJAL]: ${req.method} ${req.url}`);
-    if (['POST', 'PUT', 'PATCH'].includes(req.method)) {
-        console.log(`[DATA (BODY)]:`, JSON.stringify(req.body, null, 2));
-    }
-    console.log(`------------------------------------------------\n`);
-    next();
+  console.log(`\n------------------------------------------------`);
+  console.log(`[SERVER PŘIJAL]: ${req.method} ${req.url}`);
+  if (['POST', 'PUT', 'PATCH'].includes(req.method)) {
+    console.log(`[DATA (BODY)]:`, JSON.stringify(req.body, null, 2));
+  }
+  console.log(`------------------------------------------------\n`);
+  next();
 });
 // ------------------------------
 
@@ -45,7 +48,7 @@ async function start() {
   } catch (e) {
     console.error("Database connection failed, but starting server anyway:", e);
   }
-  
+
   app.listen(port, () => {
     console.log(`Server is running on port ${port}`);
     console.log("ČEKÁM NA POŽADAVKY...");

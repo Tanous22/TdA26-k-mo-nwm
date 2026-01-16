@@ -29,6 +29,7 @@ interface Course {
     name: string;
     description: string;
     difficulty: string;
+    category: string;
     materials: any[];
     quizzes: any[];
     feed: any[];
@@ -46,7 +47,7 @@ const getFullCourseData = async (courseId: string) => {
         [courseData.id]
     );
     const materials = (materialRows as any[])
-        .filter(m => m) 
+        .filter(m => m)
         .map(m => ({
             uuid: m.uuid,
             type: m.type,
@@ -73,19 +74,19 @@ const getFullCourseData = async (courseId: string) => {
             const base = { uuid: q.uuid, type: q.type, question: q.question, options };
             return q.type === 'singleChoice' ? { ...base, correctIndex: correctAnswer } : { ...base, correctIndices: correctAnswer };
         }).filter(q => q); // Odstranění null otázek
-        
+
         quizzes.push({ uuid: qRow.uuid, title: qRow.title, attemptsCount: qRow.attemptsCount || 0, questions });
     }
 
     // Načtení feedu
     const [feedRows] = await pool.execute(
-        "SELECT * FROM feed_events WHERE course_id = ? ORDER BY created_at DESC", 
+        "SELECT * FROM feed_events WHERE course_id = ? ORDER BY created_at DESC",
         [courseData.id]
     );
     const feed = (feedRows as any[]).map(row => ({
         uuid: row.uuid,
         type: row.type === 'message' ? 'manual' : row.type,
-        message: row.content, 
+        message: row.content,
         author: row.author,
         edited: !!row.is_edited,
         createdAt: row.created_at,
@@ -97,6 +98,7 @@ const getFullCourseData = async (courseId: string) => {
         name: courseData.name,
         description: courseData.description,
         difficulty: courseData.difficulty || "",
+        category: courseData.category || "Programování",
         materials,
         quizzes,
         feed
@@ -147,6 +149,7 @@ coursesRouter.get("/", async (req: Request, res: Response) => {
                 name: row.name,
                 description: row.description,
                 difficulty: row.difficulty || "",
+                category: row.category || "Programování",
                 materials,
                 quizzes,
                 feed: []
@@ -167,12 +170,12 @@ coursesRouter.post("/", async (req: Request, res: Response) => {
         return;
     }
     const uuid = uuidv4();
-    const { name, description = "", difficulty = "" } = req.body;
+    const { name, description = "", difficulty = "", category = "Programování" } = req.body;
     try {
         // 1. Vytvoření kurzu
         const [result] = await pool.execute(
-            "INSERT INTO courses (uuid, name, description, difficulty) VALUES (?, ?, ?, ?)",
-            [uuid, name, description, difficulty]
+            "INSERT INTO courses (uuid, name, description, difficulty, category) VALUES (?, ?, ?, ?, ?)",
+            [uuid, name, description, difficulty, category]
         );
         const courseId = (result as any).insertId;
 
@@ -199,7 +202,7 @@ coursesRouter.post("/", async (req: Request, res: Response) => {
             console.error("[Courses] Nepodařilo se zapsat do feedu:", feedError);
         }
 
-        res.status(201).json({ uuid, name, description, difficulty, materials: [], quizzes: [], feed: [] });
+        res.status(201).json({ uuid, name, description, difficulty, category, materials: [], quizzes: [], feed: [] });
     } catch (error) {
         console.error("Error creating course:", error);
         res.status(500).json({ error: "Database error" });
@@ -225,12 +228,12 @@ coursesRouter.get("/:courseId", async (req: Request, res: Response) => {
 // PUT /courses/:courseId (OPRAVENO - Vrací kompletní data)
 coursesRouter.put("/:courseId", async (req: Request, res: Response) => {
     const { courseId } = req.params;
-    const { name, description, difficulty } = req.body;
+    const { name, description, difficulty, category } = req.body;
     try {
         // 1. Aktualizace kurzu
         const [result] = await pool.execute(
-            "UPDATE courses SET name = ?, description = ?, difficulty = ? WHERE uuid = ?",
-            [name, description, difficulty || "", courseId]
+            "UPDATE courses SET name = ?, description = ?, difficulty = ?, category = ? WHERE uuid = ?",
+            [name, description, difficulty || "", category || "Programování", courseId]
         );
         if ((result as any).affectedRows === 0) {
             res.status(404).json({ error: "Not found" });
