@@ -180,15 +180,14 @@ import { ref, watch, nextTick } from "vue";
 import QuizModal from "./QuizModal.vue";
 import ConfirmationModal from "./ConfirmationModal.vue";
 
-// API URL for backend calls
 const apiUrl = import.meta.env.VITE_API_URL || '/api';
 
 interface Material {
   type: "url" | "file" | "quiz";
   value: string;
   file?: File;
-  data?: any; // Quiz data
-  uuid?: string; // For existing items
+  data?: any; 
+  uuid?: string; 
 }
 
 interface Course {
@@ -218,17 +217,14 @@ const newMaterialInput = ref("");
 const urlError = ref<string | null>(null);
 const tempFile = ref<File | null>(null);
 
-// Quiz management state
 const showQuizModal = ref(false);
 const editingQuizIndex = ref<number | null>(null);
 const currentQuizData = ref<any>(null);
 
-// Quiz deletion confirmation state
 const showQuizDeleteModal = ref(false);
 const quizIndexToDelete = ref<number | null>(null);
 const modalKey = ref(0);
 
-// Default state helper
 const defaultFormState = (): Course => ({
   name: "",
   description: "",
@@ -240,7 +236,6 @@ const defaultFormState = (): Course => ({
 const formData = ref<Course>(defaultFormState());
 
 const initForm = async () => {
-  console.log("[CourseModal] Initializing form...");
   await nextTick();
   
   if (props.course) {
@@ -250,7 +245,6 @@ const initForm = async () => {
       const mergedMaterials = safeCourse.materials || [];
       if (safeCourse.quizzes && safeCourse.quizzes.length > 0) {
           safeCourse.quizzes.forEach((q: any) => {
-              // Check if already in materials to avoid duplicates
               const exists = mergedMaterials.some((m: any) => m.type === 'quiz' && (m.uuid === q.uuid || (m.data && m.data.uuid === q.uuid)));
               if (!exists) {
                   mergedMaterials.push({
@@ -292,7 +286,6 @@ watch(
       editingQuizIndex.value = null;
       currentQuizData.value = null;
       showQuizDeleteModal.value = false;
-      // Optional: reset form data on close to keep memory clean, but not strictly required
     }
   },
   { immediate: true }
@@ -314,7 +307,6 @@ const handleFileUpload = (event: Event) => {
 };
 
 const addMaterial = () => {
-  // Guard clause for materials array
   if (!formData.value.materials) {
       formData.value.materials = [];
   }
@@ -344,7 +336,6 @@ const addMaterial = () => {
   }
 };
 
-// --- FIX: Added guard clauses for TypeScript safety ---
 const removeMaterial = (index: number) => {
   if (!formData.value.materials) return;
   
@@ -359,7 +350,6 @@ const removeMaterial = (index: number) => {
   }
 };
 
-// --- FIX: Added guard clauses for TypeScript safety ---
 const confirmQuizDelete = async () => {
   if (quizIndexToDelete.value === null || !formData.value.materials) return;
   
@@ -390,15 +380,36 @@ const close = () => {
   emit("close");
 };
 
-// --- API PRO KVÍZY ---
+// --- API PRO KVÍZY (OPRAVENO: PŘEKLAD DAT PRO EDITOR) ---
 const openQuizModal = (index: number | null = null) => {
   editingQuizIndex.value = index;
   
-  // --- FIX: Added guard clauses for TypeScript safety ---
   if (index !== null && formData.value.materials) {
       const mat = formData.value.materials[index];
       if (mat && mat.type === 'quiz' && mat.data) {
-          currentQuizData.value = JSON.parse(JSON.stringify(mat.data));
+          // HLAVNÍ OPRAVA: Mapování backend dat na frontend strukturu
+          const rawData = JSON.parse(JSON.stringify(mat.data));
+          
+          if (rawData.questions) {
+             rawData.questions = rawData.questions.map((q: any) => {
+                // Pokud už to vypadá jako frontend data, nechat být
+                if (q.options && typeof q.options[0] === 'object') return q;
+
+                // Jinak přeformátovat
+                return {
+                    uuid: q.uuid,
+                    text: q.question || q.text,
+                    type: q.type === 'singleChoice' ? 'single' : 'multiple', 
+                    options: (q.options || []).map((opt: string, i: number) => ({
+                        text: opt,
+                        isCorrect: q.type === 'singleChoice' 
+                            ? q.correctIndex === i 
+                            : (q.correctIndices || []).includes(i)
+                    }))
+                };
+             });
+          }
+          currentQuizData.value = rawData;
       } else {
           currentQuizData.value = null;
       }
@@ -410,7 +421,6 @@ const openQuizModal = (index: number | null = null) => {
 };
 
 const handleQuizSave = (quiz: any) => {
-  // Ensure materials array exists
   if (!formData.value.materials) {
       formData.value.materials = [];
   }
@@ -423,10 +433,8 @@ const handleQuizSave = (quiz: any) => {
   };
 
   if (editingQuizIndex.value !== null) {
-      // Safe update
       formData.value.materials[editingQuizIndex.value] = quizMaterial;
   } else {
-      // Safe push
       formData.value.materials.push(quizMaterial);
   }
   
