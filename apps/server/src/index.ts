@@ -13,8 +13,25 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
-// Serve static files from uploads directory
-app.use('/uploads', express.static('uploads'));
+// Custom file download route with proper headers
+import path from "path";
+import fs from "fs";
+app.get('/uploads/:filename', (req, res) => {
+  const filename = req.params.filename;
+  const filePath = path.join(process.cwd(), 'uploads', filename);
+
+  // Check if file exists
+  if (!fs.existsSync(filePath)) {
+    res.status(404).json({ error: 'File not found' });
+    return;
+  }
+
+  // Set proper headers for download
+  res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+
+  // Let express guess content-type based on file extension
+  res.sendFile(filePath);
+});
 
 // --- TOTÁLNÍ DEBUG LOGOVÁNÍ ---
 app.use((req, res, next) => {
