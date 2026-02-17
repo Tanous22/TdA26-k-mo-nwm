@@ -1,58 +1,57 @@
 <template>
-  <div class="bg-white rounded-2xl shadow-sm border border-gray-100 p-8">
-    <h2 class="text-2xl font-bold text-gray-800 flex items-center gap-2 mb-6">💬 Feed kurzu</h2>
-    <div v-if="isTeacher" class="mb-6 pb-6 border-b-2 border-dashed border-gray-200">
+  <div class="bg-white rounded-lg shadow-sm border border-gray-100 p-4">
+    <h2 class="text-lg font-bold text-gray-800 flex items-center gap-2 mb-4">💬 Feed</h2>
+    <div v-if="isTeacher" class="mb-4 pb-4 border-b border-gray-200">
       <div class="flex gap-2">
         <input
           v-model="newMessage"
           @keydown.enter="sendMessage"
           type="text"
-          placeholder="Přidej zprávu do feedu..."
-          class="organic-input flex-1"
+          placeholder="Zpráva..."
+          class="organic-input flex-1 !py-1 !text-sm"
         />
         <button
           @click="sendMessage"
           :disabled="!newMessage.trim() || isSending"
-          class="organic-btn px-6 py-2 !bg-[#91F5AD] !text-[#1A1A1A] hover:!bg-[#0070BB] hover:!text-white disabled:opacity-50"
+          class="organic-btn px-3 py-1 !text-sm !bg-[#91F5AD] !text-[#1A1A1A] hover:!bg-[#0070BB] hover:!text-white disabled:opacity-50"
         >
-          {{ isSending ? "Odesílám..." : "Poslat" }}
+          {{ isSending ? "..." : "Poslat" }}
         </button>
       </div>
-      <p v-if="error" class="text-red-500 text-sm mt-2">{{ error }}</p>
+      <p v-if="error" class="text-red-500 text-xs mt-2">{{ error }}</p>
     </div>
-    <div v-if="loading" class="text-center py-8 text-gray-400">
-      Načítám feed...
+    <div v-if="loading" class="text-center py-4 text-gray-400 text-sm">
+      Načítám...
     </div>
-    <div v-else-if="feedMessages.length === 0" class="text-center py-8 text-gray-400">
-      Zatím žádné zprávy. Buď první!
+    <div v-else-if="feedMessages.length === 0" class="text-center py-4 text-gray-400 text-sm">
+      Zatím žádné zprávy
     </div>
-    <div v-else class="space-y-4 max-h-[400px] overflow-y-auto pr-2">
+    <div v-else class="space-y-3 max-h-64 overflow-y-auto pr-2">
       <div
         v-for="msg in feedMessages"
         :key="msg.uuid"
-        class="bg-gray-50 rounded-lg p-4 border border-gray-100 hover:border-[#91F5AD] transition-colors"
+        class="bg-gray-50 rounded-lg p-3 border border-gray-100 hover:border-[#91F5AD] transition-colors"
         :class="msg.type === 'system' ? 'bg-blue-50 border-blue-100' : ''"
       >
         <div class="flex items-start justify-between gap-2">
           <div class="flex-1">
-            <div class="flex items-center gap-2 mb-1">
-              <span v-if="msg.type === 'system'" class="text-xs bg-blue-100 text-blue-700 px-2 py-1 rounded">
-                SYSTÉM
+            <div class="flex items-center gap-2 mb-1 flex-wrap">
+              <span v-if="msg.type === 'system'" class="text-xs bg-blue-100 text-blue-700 px-2 py-0.5 rounded">
+                SYS
               </span>
-              <span v-else class="text-sm font-semibold text-gray-700">
+              <span v-else class="text-xs font-semibold text-gray-700">
                 {{ msg.author || "Anonym" }}
               </span>
               <span class="text-xs text-gray-400">
                 {{ formatTime(msg.createdAt) }}
               </span>
-              <span v-if="msg.edited" class="text-xs text-gray-400 italic">(upraveno)</span>
             </div>
-            <p class="text-gray-700">{{ msg.message }}</p>
+            <p class="text-sm text-gray-700">{{ msg.message }}</p>
           </div>
           <button
             v-if="isTeacher || msg.author === currentUserName"
             @click="deleteMessage(msg.uuid)"
-            class="text-gray-300 hover:text-red-500 transition-colors"
+            class="text-gray-300 hover:text-red-500 transition-colors text-sm flex-shrink-0"
             title="Smazat"
           >
             🗑️
@@ -60,8 +59,8 @@
         </div>
       </div>
     </div>
-    <div v-if="isTeacher" class="mt-4 text-xs text-gray-400 text-center">
-      {{ isStreamConnected ? "✅ Live" : "⚠️ Odpojeno" }}
+    <div v-if="isTeacher" class="mt-3 text-xs text-gray-400 text-center">
+      {{ isStreamConnected ? "✅ Live" : "⚠️ Offline" }}
     </div>
   </div>
 </template>

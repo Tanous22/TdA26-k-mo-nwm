@@ -150,7 +150,7 @@
             </div>
           </div>
         </div>
-        <FeedPanel :courseId="courseId" />
+        <!-- FeedPanel removed from course page; use bell popover feed in HeaderNav -->
       </div>
     </div>
     <div
@@ -189,7 +189,7 @@ import { useRoute } from 'vue-router'
 import QuizRunner, { type Quiz } from '../components/QuizRunner.vue'
 import QuizModal from '../components/QuizModal.vue'
 import ConfirmationModal from '../components/ConfirmationModal.vue'
-import FeedPanel from '../components/FeedPanel.vue'
+// FeedPanel intentionally not imported here; bell icon in HeaderNav shows course feed
 import { useAuth } from '../composables/useAuth'
 import { useNotifications } from '../composables/useNotifications'
 import {
@@ -351,6 +351,10 @@ const handleQuizSave = async (quizData: any) => {
     const payload = {
       title: quizData.title,
       questions: backendQuestions,
+      scheduledAt: quizData.scheduledAt || null,
+      scheduledEnd: quizData.scheduledEnd || null,
+      durationMinutes: quizData.durationMinutes || null,
+      publishedAt: quizData.publishedAt || null,
     }
     const url = editingQuiz.value
       ? `${API_URL}/courses/${courseId}/quizzes/${editingQuiz.value.uuid}`

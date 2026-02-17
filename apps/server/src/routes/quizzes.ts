@@ -29,18 +29,36 @@ quizzesRouter.get("/", async (req: Request, res: Response) => {
             res.status(404).json({ error: "Course not found" });
             return;
         }
+
+        // Check if user is a teacher/lecturer (this assumes auth middleware adds user to request)
+        const isTeacher = (req as any).user?.role === 'teacher' || (req as any).user?.role === 'admin';
+
         const [quizRows] = await pool.execute(`
             SELECT q.*, (SELECT COUNT(*) FROM quiz_attempts qa WHERE qa.quiz_id = q.id) as attemptsCount
             FROM quizzes q 
-            WHERE q.course_id = ? 
+            WHERE q.course_id = ? AND q.deleted_at IS NULL
             ORDER BY q.created_at DESC
         `, [dbCourseId]);
+
         const quizzes = [];
+        const now = new Date();
+
         for (const qRow of (quizRows as any[])) {
+            // Filter out unpublished quizzes (unless user is teacher)
+            if (!isTeacher && qRow.published_at && new Date(qRow.published_at) > now) {
+                continue;
+            }
+
+            // Filter out scheduled quizzes in the future (unless user is teacher)
+            if (qRow.scheduled_at && new Date(qRow.scheduled_at) > now && !isTeacher) {
+                continue;
+            }
+
             const [questionRows] = await pool.execute(
                 "SELECT * FROM quiz_questions WHERE quiz_id = ?",
                 [qRow.id]
             );
+
             const questions = (questionRows as any[]).map(q => {
                 const options = parseJson(q.options);
                 const correctAnswer = parseJson(q.correct_answer);
@@ -56,13 +74,32 @@ quizzesRouter.get("/", async (req: Request, res: Response) => {
                     return { ...base, correctIndices: correctAnswer };
                 }
             });
+
+            // Determine quiz status
+            let status = 'ACTIVE';
+            if (qRow.started_at && qRow.duration_minutes) {
+                const endTime = new Date(qRow.started_at);
+                endTime.setMinutes(endTime.getMinutes() + qRow.duration_minutes);
+                if (endTime < now) {
+                    status = 'ARCHIVED';
+                }
+            }
+
             quizzes.push({
                 uuid: qRow.uuid,
                 title: qRow.title,
                 attemptsCount: qRow.attemptsCount || 0,
-                questions: questions
+                questions: questions,
+                status: status,
+                scheduledAt: qRow.scheduled_at,
+                scheduledEnd: qRow.scheduled_end_at,
+                durationMinutes: qRow.duration_minutes,
+                isPaused: qRow.is_paused,
+                startedAt: qRow.started_at,
+                publishedAt: qRow.published_at
             });
         }
+
         res.status(200).json(quizzes);
     } catch (error) {
         console.error("[DEBUG-QUIZ] Error fetching quizzes:", error);
@@ -72,7 +109,7 @@ quizzesRouter.get("/", async (req: Request, res: Response) => {
 quizzesRouter.post("/", async (req: Request, res: Response) => {
     console.log("--- [DEBUG-QUIZ] POST / HIT ---");
     const { courseId } = req.params;
-    const { title, questions } = req.body;
+    const { title, questions, scheduledAt, scheduledEnd, durationMinutes, publishedAt } = req.body;
     console.log("Params courseId:", courseId);
     console.log("Body title:", title);
     console.log("Body questions count:", questions?.length);
@@ -90,8 +127,8 @@ quizzesRouter.post("/", async (req: Request, res: Response) => {
         const quizUuid = uuidv4();
         console.log(`[DEBUG-QUIZ] Creating quiz '${title}' with UUID ${quizUuid}`);
         const [quizResult] = await pool.execute(
-            "INSERT INTO quizzes (uuid, course_id, title) VALUES (?, ?, ?)",
-            [quizUuid, dbCourseId, title]
+            "INSERT INTO quizzes (uuid, course_id, title, scheduled_at, scheduled_end_at, duration_minutes, published_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
+            [quizUuid, dbCourseId, title, scheduledAt || null, scheduledEnd || null, durationMinutes || null, publishedAt || null]
         );
         const newQuizId = (quizResult as any).insertId;
         console.log(`[DEBUG-QUIZ] Quiz created, internal ID: ${newQuizId}`);
@@ -145,7 +182,11 @@ quizzesRouter.post("/", async (req: Request, res: Response) => {
             uuid: quizUuid,
             title,
             attemptsCount: 0,
-            questions: savedQuestions
+            questions: savedQuestions,
+            scheduledAt: scheduledAt || null,
+            scheduledEnd: scheduledEnd || null,
+            durationMinutes: durationMinutes || null,
+            publishedAt: publishedAt || null
         });
     } catch (error) {
         console.error("[DEBUG-QUIZ] CRITICAL ERROR creating quiz:", error);
@@ -154,17 +195,25 @@ quizzesRouter.post("/", async (req: Request, res: Response) => {
 });
 quizzesRouter.get("/:quizId", async (req: Request, res: Response) => {
     const { quizId } = req.params;
+    const { courseId } = req.query;
+    const user = (req as any).user;
     console.log(`[DEBUG-QUIZ] GET Detail for ${quizId}`);
     try {
         const [rows] = await pool.execute(`
             SELECT q.*, (SELECT COUNT(*) FROM quiz_attempts qa WHERE qa.quiz_id = q.id) as attemptsCount 
             FROM quizzes q 
-            WHERE q.uuid = ?
+            WHERE q.uuid = ? AND q.deleted_at IS NULL
         `, [quizId]);
         const quizData = (rows as any[])[0];
         if (!quizData) {
             console.warn(`[DEBUG-QUIZ] Quiz not found for UUID ${quizId}`);
             res.status(404).json({ error: "Quiz not found" });
+            return;
+        }
+        // Check if student can access this quiz (published or they are teacher)
+        if (user && !user.isTeacher && quizData.published_at && new Date(quizData.published_at) > new Date()) {
+            console.warn(`[DEBUG-QUIZ] Student accessing unpublished quiz ${quizId}`);
+            res.status(403).json({ error: "Quiz not yet published" });
             return;
         }
         const [questionRows] = await pool.execute(
@@ -190,7 +239,13 @@ quizzesRouter.get("/:quizId", async (req: Request, res: Response) => {
             uuid: quizData.uuid,
             title: quizData.title,
             attemptsCount: quizData.attemptsCount || 0,
-            questions: questions
+            questions: questions,
+            scheduledAt: quizData.scheduled_at,
+            scheduledEnd: quizData.scheduled_end_at,
+            durationMinutes: quizData.duration_minutes,
+            isPaused: quizData.is_paused,
+            startedAt: quizData.started_at,
+            publishedAt: quizData.published_at
         });
     } catch (error) {
         console.error("[DEBUG-QUIZ] Error fetching quiz detail:", error);
@@ -199,17 +254,21 @@ quizzesRouter.get("/:quizId", async (req: Request, res: Response) => {
 });
 quizzesRouter.put("/:quizId", async (req: Request, res: Response) => {
     const { quizId, courseId } = req.params;
-    const { title, questions } = req.body;
+    const { title, questions, scheduledAt, durationMinutes, publishedAt } = req.body;
     console.log(`[DEBUG-QUIZ] PUT /${quizId} HIT - Smart Update`);
     try {
-        const [rows] = await pool.execute("SELECT id FROM quizzes WHERE uuid = ?", [quizId]);
+        const [rows] = await pool.execute("SELECT id, course_id FROM quizzes WHERE uuid = ? AND deleted_at IS NULL", [quizId]);
         const quizData = (rows as any[])[0];
         if (!quizData) {
             res.status(404).json({ error: "Quiz not found" });
             return;
         }
         const dbQuizId = quizData.id;
-        await pool.execute("UPDATE quizzes SET title = ? WHERE id = ?", [title, dbQuizId]);
+        const courseIntId = quizData.course_id;
+        await pool.execute(
+            "UPDATE quizzes SET title = ?, scheduled_at = ?, scheduled_end_at = ?, duration_minutes = ?, published_at = ? WHERE id = ?", 
+            [title, scheduledAt || null, scheduledEnd || null, durationMinutes || null, publishedAt || null, dbQuizId]
+        );
         const [existingRows] = await pool.execute("SELECT uuid FROM quiz_questions WHERE quiz_id = ?", [dbQuizId]);
         const existingUuids = (existingRows as any[]).map(r => r.uuid);
         const keptUuids: string[] = []; 
@@ -256,8 +315,6 @@ quizzesRouter.put("/:quizId", async (req: Request, res: Response) => {
         try {
             const feedUuid = uuidv4();
             const feedContent = `Kvíz aktualizován: ${title}`;
-            const [courseRows] = await pool.execute("SELECT course_id FROM quizzes WHERE uuid = ?", [quizId]);
-            const courseIntId = (courseRows as any)[0]?.course_id;
             if (courseIntId) {
                  await pool.execute(
                     "INSERT INTO feed_events (uuid, course_id, type, content, author, created_at, updated_at) VALUES (?, ?, ?, ?, ?, NOW(), NOW())",
@@ -278,7 +335,10 @@ quizzesRouter.put("/:quizId", async (req: Request, res: Response) => {
             uuid: quizId, 
             title, 
             attemptsCount: count,
-            questions: savedQuestions
+            questions: savedQuestions,
+            scheduledAt: scheduledAt || null,
+            durationMinutes: durationMinutes || null,
+            publishedAt: publishedAt || null
         });
     } catch (error) {
         console.error("[DEBUG-QUIZ] Error updating quiz:", error);
@@ -288,13 +348,16 @@ quizzesRouter.put("/:quizId", async (req: Request, res: Response) => {
 quizzesRouter.delete("/:quizId", async (req: Request, res: Response) => {
     const { quizId, courseId } = req.params;
     try {
-        const [quizRows] = await pool.execute("SELECT title FROM quizzes WHERE uuid = ?", [quizId]);
+        const [quizRows] = await pool.execute("SELECT title, course_id FROM quizzes WHERE uuid = ? AND deleted_at IS NULL", [quizId]);
         if ((quizRows as any[]).length === 0) {
             res.status(404).json({ error: "Quiz not found" });
             return;
         }
         const quizTitle = (quizRows as any[])[0].title;
-        const [result] = await pool.execute("DELETE FROM quizzes WHERE uuid = ?", [quizId]);
+        const quizCourseId = (quizRows as any[])[0].course_id;
+        
+        // Soft delete: set deleted_at instead of actually deleting
+        const [result] = await pool.execute("UPDATE quizzes SET deleted_at = NOW() WHERE uuid = ?", [quizId]);
         if ((result as any).affectedRows === 0) {
              res.status(404).json({ error: "Quiz not found" });
              return;
@@ -302,21 +365,17 @@ quizzesRouter.delete("/:quizId", async (req: Request, res: Response) => {
         try {
             const feedUuid = uuidv4();
             const feedContent = `Kvíz smazán: ${quizTitle}`;
-            const [courseRows] = await pool.execute("SELECT id FROM courses WHERE uuid = ?", [courseId]);
-            if ((courseRows as any[]).length > 0) {
-                const courseIntId = (courseRows as any[])[0].id;
-                await pool.execute(
-                    "INSERT INTO feed_events (uuid, course_id, type, content, author, created_at, updated_at) VALUES (?, ?, ?, ?, ?, NOW(), NOW())",
-                    [feedUuid, courseIntId, "system", feedContent, null]
-                );
-                broadcastToCourse(courseId, {
-                    uuid: feedUuid,
-                    type: "system",
-                    message: feedContent,
-                    createdAt: new Date(),
-                    isEdited: false
-                });
-            }
+            await pool.execute(
+                "INSERT INTO feed_events (uuid, course_id, type, content, author, created_at, updated_at) VALUES (?, ?, ?, ?, ?, NOW(), NOW())",
+                [feedUuid, quizCourseId, "system", feedContent, null]
+            );
+            broadcastToCourse(courseId, {
+                uuid: feedUuid,
+                type: "system",
+                message: feedContent,
+                createdAt: new Date(),
+                isEdited: false
+            });
         } catch (feedError) {
             console.error("[DEBUG-QUIZ] Nepodařilo se zapsat mazání do feedu:", feedError);
         }
@@ -330,7 +389,7 @@ quizzesRouter.post("/:quizId/submit", async (req: Request, res: Response) => {
     const { quizId } = req.params;
     const { answers } = req.body;
     try {
-        const [rows] = await pool.execute("SELECT id FROM quizzes WHERE uuid = ?", [quizId]);
+        const [rows] = await pool.execute("SELECT id FROM quizzes WHERE uuid = ? AND deleted_at IS NULL", [quizId]);
         const quizData = (rows as any[])[0];
         if (!quizData) {
             res.status(404).json({ error: "Quiz not found" });
@@ -375,6 +434,86 @@ quizzesRouter.post("/:quizId/submit", async (req: Request, res: Response) => {
         });
     } catch (error) {
         console.error("Error submitting quiz:", error);
+        res.status(500).json({ error: "Database error" });
+    }
+});
+
+quizzesRouter.post("/:quizId/control", async (req: Request, res: Response) => {
+    const { quizId, courseId } = req.params;
+    const { action } = req.body;
+
+    if (!['start', 'pause', 'resume'].includes(action)) {
+        res.status(400).json({ error: "Invalid action. Must be 'start', 'pause', or 'resume'." });
+        return;
+    }
+
+    try {
+        const [rows] = await pool.execute("SELECT id, title, course_id FROM quizzes WHERE uuid = ? AND deleted_at IS NULL", [quizId]);
+        const quizData = (rows as any[])[0];
+        if (!quizData) {
+            res.status(404).json({ error: "Quiz not found" });
+            return;
+        }
+
+        const dbQuizId = quizData.id;
+        const quizTitle = quizData.title;
+        const dbCourseId = quizData.course_id;
+        let updateQuery = "";
+        let params: any[] = [];
+
+        if (action === 'start') {
+            updateQuery = "UPDATE quizzes SET started_at = NOW(), is_paused = 0 WHERE id = ?";
+            params = [dbQuizId];
+        } else if (action === 'pause') {
+            updateQuery = "UPDATE quizzes SET is_paused = 1 WHERE id = ?";
+            params = [dbQuizId];
+        } else if (action === 'resume') {
+            updateQuery = "UPDATE quizzes SET is_paused = 0 WHERE id = ?";
+            params = [dbQuizId];
+        }
+
+        await pool.execute(updateQuery, params);
+
+        const [updatedRows] = await pool.execute("SELECT * FROM quizzes WHERE id = ? AND deleted_at IS NULL", [dbQuizId]);
+        const updatedQuiz = (updatedRows as any[])[0];
+
+        // Add system message to feed
+        try {
+            const feedUuid = uuidv4();
+            let feedContent = '';
+            if (action === 'start') {
+                feedContent = `✅ Kvíz spuštěn: ${quizTitle}`;
+            } else if (action === 'pause') {
+                feedContent = `⏸️ Kvíz pozastaven: ${quizTitle}`;
+            } else if (action === 'resume') {
+                feedContent = `▶️ Kvíz pokračuje: ${quizTitle}`;
+            }
+            
+            await pool.execute(
+                "INSERT INTO feed_events (uuid, course_id, type, content, author, created_at) VALUES (?, ?, ?, ?, ?, NOW())",
+                [feedUuid, dbCourseId, "system", feedContent, null]
+            );
+            
+            broadcastToCourse(courseId, {
+                uuid: feedUuid,
+                type: "system",
+                message: feedContent,
+                createdAt: new Date(),
+                isEdited: false
+            });
+        } catch (feedError) {
+            console.error("[DEBUG-QUIZ] Nepodařilo se zapsat kontrolu do feedu:", feedError);
+        }
+
+        res.status(200).json({
+            uuid: quizId,
+            action,
+            status: updatedQuiz.is_paused ? 'PAUSED' : 'ACTIVE',
+            startedAt: updatedQuiz.started_at,
+            isPaused: updatedQuiz.is_paused
+        });
+    } catch (error) {
+        console.error("[DEBUG-QUIZ] Error controlling quiz:", error);
         res.status(500).json({ error: "Database error" });
     }
 });

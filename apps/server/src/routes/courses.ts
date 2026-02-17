@@ -24,6 +24,7 @@ interface Course {
     description: string;
     difficulty: string;
     category: string;
+    publishedAt?: string | null;
     materials: any[];
     quizzes: any[];
     feed: any[];
@@ -94,6 +95,7 @@ const getFullCourseData = async (courseId: string) => {
         description: courseData.description,
         difficulty: courseData.difficulty || "",
         category: courseData.category || "Programování",
+        publishedAt: courseData.published_at,
         materials,
         quizzes,
         feed
@@ -145,6 +147,7 @@ coursesRouter.get("/", async (req: Request, res: Response) => {
                 description: row.description,
                 difficulty: row.difficulty || "",
                 category: row.category || "Programování",
+                publishedAt: row.published_at,
                 materials,
                 quizzes,
                 feed: []
@@ -164,12 +167,12 @@ coursesRouter.post("/", async (req: Request, res: Response) => {
         return;
     }
     const uuid = uuidv4();
-    const { name, description = "", difficulty = "", category = "Programování" } = req.body;
+    const { name, description = "", difficulty = "", category = "Programování", publishedAt = null } = req.body;
 
     try {
         const [result] = await pool.execute(
-            "INSERT INTO courses (uuid, name, description, difficulty, category) VALUES (?, ?, ?, ?, ?)",
-            [uuid, name, description, difficulty, category]
+            "INSERT INTO courses (uuid, name, description, difficulty, category, published_at) VALUES (?, ?, ?, ?, ?, ?)",
+            [uuid, name, description, difficulty, category, publishedAt || null]
         );
         const courseId = (result as any).insertId;
 
@@ -192,7 +195,7 @@ coursesRouter.post("/", async (req: Request, res: Response) => {
             console.error("[Courses] Nepodařilo se zapsat do feedu:", feedError);
         }
 
-        res.status(201).json({ uuid, name, description, difficulty, category, materials: [], quizzes: [], feed: [] });
+        res.status(201).json({ uuid, name, description, difficulty, category, publishedAt: publishedAt || null, materials: [], quizzes: [], feed: [] });
     } catch (error) {
         console.error("Error creating course:", error);
         res.status(500).json({ error: "Database error" });
@@ -216,12 +219,12 @@ coursesRouter.get("/:courseId", async (req: Request, res: Response) => {
 
 coursesRouter.put("/:courseId", async (req: Request, res: Response) => {
     const { courseId } = req.params;
-    const { name, description, difficulty, category } = req.body;
+    const { name, description, difficulty, category, publishedAt } = req.body;
 
     try {
         const [result] = await pool.execute(
-            "UPDATE courses SET name = ?, description = ?, difficulty = ?, category = ? WHERE uuid = ?",
-            [name, description, difficulty || "", category || "Programování", courseId]
+            "UPDATE courses SET name = ?, description = ?, difficulty = ?, category = ?, published_at = ? WHERE uuid = ?",
+            [name, description, difficulty || "", category || "Programování", publishedAt || null, courseId]
         );
 
         if ((result as any).affectedRows === 0) {

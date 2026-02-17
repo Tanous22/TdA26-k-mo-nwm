@@ -3,6 +3,7 @@ import HomeView from '../views/HomeView.vue'
 import CoursesView from '../views/CoursesView.vue'
 import LoginView from '../views/LoginView.vue'
 import DashboardView from '../views/DashboardView.vue'
+import ArchiveView from '../views/ArchiveView.vue'
 const routes: RouteRecordRaw[] = [
   {
     path: '/',
@@ -18,6 +19,11 @@ const routes: RouteRecordRaw[] = [
     path: '/courses/:courseId',
     name: 'course-detail',
     component: () => import('../views/CourseDetailView.vue')
+  },
+  {
+    path: '/archive',
+    name: 'archive',
+    component: ArchiveView
   },
   {
     path: '/login',

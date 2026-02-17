@@ -23,6 +23,86 @@
               placeholder="Např. Test z CSS Grid"
             />
           </div>
+
+          <!-- Scheduling Section -->
+          <div class="bg-blue-50 p-6 rounded-lg border-2 border-blue-200 space-y-4">
+            <h3 class="font-bold text-[#0070BB] flex items-center gap-2">
+              ⏰ Naplánování
+            </h3>
+            <div class="grid grid-cols-1 gap-4">
+              <div>
+                <label class="block font-bold mb-1 text-sm">Zveřejnit kvíz od</label>
+                <input
+                  v-model="quizData.publishedAt"
+                  type="datetime-local"
+                  class="organic-input w-full"
+                />
+                <p class="text-xs text-gray-500 mt-1">Kvíz bude viditelný pro studenty od tohoto času</p>
+              </div>
+              <div>
+                <label class="block font-bold mb-1 text-sm">Spustit kvíz v</label>
+                <input
+                  v-model="quizData.scheduledAt"
+                  type="datetime-local"
+                  class="organic-input w-full"
+                />
+                <p class="text-xs text-gray-500 mt-1">Volitelné - pokud chcete automaticky spustit</p>
+              </div>
+              <div>
+                <label class="block font-bold mb-1 text-sm">Doba trvání (minut)</label>
+                <input
+                  v-model.number="quizData.durationMinutes"
+                  type="number"
+                  min="1"
+                  class="organic-input w-full"
+                  placeholder="Např. 30"
+                />
+              </div>
+              <div>
+                <label class="block font-bold mb-1 text-sm">Ukončit kvíz v</label>
+                <input
+                  v-model="quizData.scheduledEnd"
+                  type="datetime-local"
+                  class="organic-input w-full"
+                />
+                <p class="text-xs text-gray-500 mt-1">Volitelné - automatické ukončení kvízu v tomto čase</p>
+              </div>
+            </div>
+          </div>
+
+          <!-- Control Section (only for active quizzes) -->
+          <div v-if="editMode && quizData.uuid && isActive" class="bg-green-50 p-6 rounded-lg border-2 border-green-200 space-y-4">
+            <h3 class="font-bold text-green-700 flex items-center gap-2">
+              🎮 Ovládání kvízu
+            </h3>
+            <div class="flex flex-wrap gap-3">
+              <button
+                v-if="!quizStarted"
+                type="button"
+                @click="controlQuiz('start')"
+                class="organic-btn !bg-green-500 !text-white hover:!bg-green-600 px-6 py-2"
+              >
+                ▶️ SPUSTIT NYNÍ
+              </button>
+              <button
+                v-if="quizStarted && !quizPaused"
+                type="button"
+                @click="controlQuiz('pause')"
+                class="organic-btn !bg-yellow-500 !text-white hover:!bg-yellow-600 px-6 py-2"
+              >
+                ⏸️ POZASTAVIT
+              </button>
+              <button
+                v-if="quizStarted && quizPaused"
+                type="button"
+                @click="controlQuiz('resume')"
+                class="organic-btn !bg-blue-500 !text-white hover:!bg-blue-600 px-6 py-2"
+              >
+                ▶️ POKRAČOVAT
+              </button>
+            </div>
+            <p v-if="controlError" class="text-red-600 text-sm font-bold">{{ controlError }}</p>
+          </div>
           <div class="space-y-6">
             <div
               v-for="(question, qIndex) in quizData.questions"
@@ -174,6 +254,9 @@
 </template>
 <script setup lang="ts">
 import { ref, watch } from "vue";
+import { useApi } from "../composables/useApi";
+import { useNotifications } from "../composables/useNotifications";
+
 interface QuizOption {
   id: string;
   text: string;
@@ -186,24 +269,43 @@ interface QuizQuestion {
   options: QuizOption[];
 }
 export interface Quiz {
-  uuid?: string; // --- ZMĚNA 1: Přidáno pole pro UUID
+  uuid?: string;
   title: string;
   questions: QuizQuestion[];
+  scheduledAt?: string | null;
+  scheduledEnd?: string | null;
+  durationMinutes?: number | null;
+  publishedAt?: string | null;
+  isPaused?: boolean;
+  startedAt?: string | null;
 }
 const props = defineProps<{
   show: boolean;
   editMode?: boolean;
   initialData?: any; 
+  courseId?: string;
 }>();
 const emit = defineEmits<{
   close: [];
   save: [quiz: Quiz];
 }>();
+
+const { API_URL } = useApi();
+const { error: showError, success } = useNotifications();
 const errorMessage = ref<string | null>(null);
+const controlError = ref<string | null>(null);
+const isActive = ref(false);
+const quizStarted = ref(false);
+const quizPaused = ref(false);
+
 const quizData = ref<Quiz>({
   title: "",
   questions: [],
+  scheduledAt: null,
+  scheduledEnd: null,
+  durationMinutes: null,
 });
+
 const resetForm = () => {
   quizData.value = {
     title: "",
@@ -217,12 +319,20 @@ const resetForm = () => {
           { id: crypto.randomUUID(), text: "", isCorrect: false },
         ],
       },
-    ]
+    ],
+    scheduledAt: null,
+    durationMinutes: null,
+    publishedAt: null,
   };
+  isActive.value = false;
+  quizStarted.value = false;
+  quizPaused.value = false;
 };
+
 watch(() => props.show, (isOpen) => {
   if (isOpen) {
     errorMessage.value = null;
+    controlError.value = null;
     if (props.editMode && props.initialData) {
       try {
         const sourceData = JSON.parse(JSON.stringify(props.initialData));
@@ -248,18 +358,27 @@ watch(() => props.show, (isOpen) => {
              options.push({ id: crypto.randomUUID(), text: "", isCorrect: false });
           }
           return {
-            id: crypto.randomUUID(), // Interní ID pro Vue for-loop (neřeší backend)
-            uuid: q.uuid, // Zde bychom mohli zachovat UUID otázky, pokud bychom chtěli být extra přesní, ale pro DUPLICATE QUIZ bug to není kritické.
+            id: crypto.randomUUID(),
+            uuid: q.uuid,
             text: q.question || q.text || "",
             type: type,
             options: options
           };
         });
         quizData.value = {
-          uuid: sourceData.uuid, // --- ZMĚNA 2: Tady si pamatujeme ID kvízu!
+          uuid: sourceData.uuid,
           title: sourceData.title || "",
-          questions: mappedQuestions
+          questions: mappedQuestions,
+            scheduledAt: sourceData.scheduledAt || null,
+            scheduledEnd: sourceData.scheduledEnd || null,
+            durationMinutes: sourceData.durationMinutes || null,
+            publishedAt: sourceData.publishedAt || null,
         };
+
+        // Check if quiz is active and can be controlled
+        isActive.value = sourceData.status === 'ACTIVE';
+        quizStarted.value = !!sourceData.startedAt;
+        quizPaused.value = sourceData.isPaused || false;
       } catch (e) {
         console.error("Chyba při parsování kvízu:", e);
         resetForm();
@@ -269,6 +388,7 @@ watch(() => props.show, (isOpen) => {
     }
   }
 });
+
 const addQuestion = () => {
   quizData.value.questions.push({
     id: crypto.randomUUID(),
@@ -280,6 +400,7 @@ const addQuestion = () => {
     ],
   });
 };
+
 const removeQuestion = (index: number) => {
   if (quizData.value.questions.length > 1) {
     quizData.value.questions.splice(index, 1);
@@ -287,6 +408,7 @@ const removeQuestion = (index: number) => {
     errorMessage.value = "Kvíz musí mít alespoň jednu otázku.";
   }
 };
+
 const addOption = (qIndex: number) => {
   const question = quizData.value.questions[qIndex];
   if (question) {
@@ -297,6 +419,7 @@ const addOption = (qIndex: number) => {
     });
   }
 };
+
 const removeOption = (qIndex: number, oIndex: number) => {
   const question = quizData.value.questions[qIndex];
   if (question && question.options.length > 2) {
@@ -305,12 +428,14 @@ const removeOption = (qIndex: number, oIndex: number) => {
     errorMessage.value = "Otázka musí mít alespoň dvě možnosti.";
   }
 };
+
 const handleTypeChange = (qIndex: number) => {
   const question = quizData.value.questions[qIndex];
   if (question && question.type === 'single') {
     question.options.forEach((opt, i) => opt.isCorrect = (i === 0));
   }
 };
+
 const setCorrectOption = (qIndex: number, oIndex: number) => {
   const question = quizData.value.questions[qIndex];
   if (question && question.type === 'single') {
@@ -319,10 +444,13 @@ const setCorrectOption = (qIndex: number, oIndex: number) => {
     });
   }
 };
+
 const close = () => {
   emit("close");
   errorMessage.value = null;
+  controlError.value = null;
 };
+
 const validateQuiz = (): boolean => {
   if (!quizData.value.title.trim()) {
     errorMessage.value = "Prosím vyplňte název kvízu.";
@@ -348,6 +476,35 @@ const validateQuiz = (): boolean => {
   }
   return true;
 };
+
+const controlQuiz = async (action: 'start' | 'pause' | 'resume') => {
+  if (!quizData.value.uuid || !props.courseId) return;
+
+  try {
+    controlError.value = null;
+    const response = await fetch(
+      `${API_URL}/courses/${props.courseId}/quizzes/${quizData.value.uuid}/control`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action })
+      }
+    );
+
+    if (!response.ok) throw new Error('Nepodařilo se změnit stav kvízu');
+    
+    const result = await response.json();
+    
+    quizStarted.value = action === 'start' || (quizStarted.value && action !== 'start');
+    quizPaused.value = action === 'pause' || (quizPaused.value && action === 'pause');
+    
+    success(`Kvíz: ${action === 'start' ? 'spuštěn' : action === 'pause' ? 'pozastaven' : 'pokračuje'}`);
+  } catch (err) {
+    controlError.value = err instanceof Error ? err.message : 'Chyba při kontrole kvízu';
+    showError(controlError.value);
+  }
+};
+
 const saveQuiz = () => {
   if (!validateQuiz()) {
       return;

@@ -60,6 +60,20 @@
               placeholder="O čem kurz bude..."
             ></textarea>
           </div>
+          <div class="bg-blue-50 p-6 rounded-lg border-2 border-blue-200">
+            <h3 class="font-bold text-[#0070BB] flex items-center gap-2 mb-4">
+              ⏰ Naplánování zveřejnění
+            </h3>
+            <div>
+              <label class="block font-bold mb-1 text-sm">Zveřejnit kurz od</label>
+              <input
+                v-model="formData.publishedAt"
+                type="datetime-local"
+                class="organic-input w-full"
+              />
+              <p class="text-xs text-gray-500 mt-1">Kurz bude viditelný pro studenty od tohoto času</p>
+            </div>
+          </div>
           <div class="border-t-2 border-dashed border-gray-200 pt-4 mt-4">
             <label
               class="block font-bold mb-4 text-xl text-[#0257A5] text-center"
@@ -182,6 +196,7 @@ interface Course {
   description: string;
   category?: string;
   difficulty?: string;
+  publishedAt?: string | null;
   materials?: Material[];
   quizzes?: any[];
 }
@@ -211,6 +226,7 @@ const defaultFormState = (): Course => ({
   description: "",
   category: "Programování",
   difficulty: "Jednoduchý",
+  publishedAt: null,
   materials: [],
 });
 const formData = ref<Course>(defaultFormState());
@@ -261,6 +277,7 @@ const initForm = async () => {
             description: safeCourse.description || "",
             category: safeCourse.category || "Programování",
             difficulty: safeCourse.difficulty || "Začátečník",
+            publishedAt: safeCourse.publishedAt || null,
             materials: mergedMaterials
           };
       } else {

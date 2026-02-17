@@ -1,12 +1,56 @@
 <template>
-  <div class="space-y-6">
+  <div class="space-y-6 relative">
+    <!-- Pause Overlay -->
+    <div
+      v-if="isPaused"
+      class="fixed inset-0 bg-black/80 flex items-center justify-center z-50 backdrop-blur-sm"
+    >
+      <div class="bg-white rounded-2xl p-12 text-center max-w-md shadow-2xl organic-box animate-bounce-in">
+        <div class="text-6xl mb-6">⏸️</div>
+        <h2 class="text-3xl font-bold text-gray-800 mb-4">Kvíz je pozastavený</h2>
+        <p class="text-gray-600 text-lg mb-6">
+          Lektor pozastavil kvíz. Prosím čekejte na pokyn k pokračování.
+        </p>
+        <button
+          @click="acknowledgesPause"
+          class="organic-btn px-8 py-3 w-full"
+        >
+          Rozumím
+        </button>
+      </div>
+    </div>
+
+    <!-- Time Warning -->
+    <div
+      v-if="!submitted && timeRemaining !== null && timeRemaining < 300"
+      class="sticky top-0 z-40 bg-orange-50 border-2 border-orange-300 rounded-lg p-4 flex items-center justify-between"
+    >
+      <div class="flex items-center gap-3">
+        <span class="text-2xl">⏱️</span>
+        <div>
+          <p class="font-bold text-orange-700">Čas se končí!</p>
+          <p class="text-sm text-orange-600">Zbývá: {{ formatTime(timeRemaining) }}</p>
+        </div>
+      </div>
+      <button
+        @click="submitQuiz"
+        class="organic-btn !bg-orange-500 !text-white hover:!bg-orange-600 px-6 py-2 text-sm"
+      >
+        Odeslat nyní
+      </button>
+    </div>
+
     <div class="text-center mb-8">
       <h3 class="text-2xl font-bold text-gray-900 mb-2">{{ quiz.title }}</h3>
-      <p class="text-gray-500 text-sm">
-        {{ quiz.questions.length }} otázek • Vyplněno {{ quiz.attemptsCount || 0 }}×
-      </p>
+      <div class="flex items-center justify-center gap-4 text-gray-500 text-sm">
+        <span>{{ quiz.questions.length }} otázek • Vyplněno {{ quiz.attemptsCount || 0 }}×</span>
+        <span v-if="timeRemaining !== null" class="font-bold text-[#0070BB]">
+          Zbývá: {{ formatTime(timeRemaining) }}
+        </span>
+      </div>
     </div>
-    <div v-if="!submitted" class="space-y-8">
+
+    <div v-if="!submitted" class="space-y-8" :class="{ 'opacity-50 pointer-events-none': isPaused }">
       <div
         v-for="(question, qIndex) in quiz.questions"
         :key="question.uuid"
@@ -30,6 +74,7 @@
                 ? 'bg-[#0070BB] border-[#0070BB] text-white shadow-md'
                 : 'bg-white border-gray-200 hover:border-gray-300 text-gray-700'
             ]"
+            :style="{ opacity: isPaused ? 0.5 : 1 }"
           >
             <div
               class="w-6 h-6 rounded border-2 flex items-center justify-center flex-shrink-0 transition-colors"
@@ -47,13 +92,15 @@
       <div class="flex justify-end gap-4 pt-4 border-t border-gray-100">
         <button
           @click="$emit('cancel')"
-          class="px-6 py-3 rounded-lg font-bold text-gray-500 hover:bg-gray-100 transition-colors"
+          :disabled="isPaused"
+          class="px-6 py-3 rounded-lg font-bold text-gray-500 hover:bg-gray-100 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
         >
           Zrušit
         </button>
         <button
           @click="submitQuiz"
-          class="organic-btn !bg-[#0070BB] !text-white !border-none hover:bg-[#005a96] px-8"
+          :disabled="isPaused"
+          class="organic-btn !bg-[#0070BB] !text-white !border-none hover:bg-[#005a96] px-8 disabled:opacity-50 disabled:cursor-not-allowed"
         >
           Vyhodnotit
         </button>
@@ -97,29 +144,43 @@ export interface Quiz {
   questions: Question[]
   attempts?: number
   attemptsCount?: number
+  isPaused?: boolean
+  startedAt?: string | null
+  durationMinutes?: number | null
 }
 </script>
 <script setup lang="ts">
-import { ref, computed } from 'vue'
+import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { useNotifications } from '../composables/useNotifications'
 import { useApi } from '../composables/useApi'
+
 const props = defineProps<{
   quiz: Quiz
   courseId: string
 }>()
+
 const emit = defineEmits<{
   close: []
   cancel: []
 }>()
+
 const { success, error: showError } = useNotifications()
 const { API_URL } = useApi()
+
 const answers = ref<Record<string, number[]>>({})
 const submitted = ref(false)
 const result = ref<{ score: number; maxScore: number } | null>(null)
+const timeRemaining = ref<number | null>(null)
+const isPaused = ref(false)
+const pauseAcknowledged = ref(false)
+let pollInterval: any = null
+let timerInterval: any = null
+
 const isSelected = (qId: string, oIndex: number) =>
   answers.value[qId]?.includes(oIndex) ?? false
+
 const toggleAnswer = (qId: string, oIndex: number, type: 'single' | 'multiple') => {
-  if (submitted.value) return
+  if (submitted.value || isPaused.value) return
   if (!answers.value[qId]) {
     answers.value[qId] = []
   }
@@ -134,7 +195,75 @@ const toggleAnswer = (qId: string, oIndex: number, type: 'single' | 'multiple') 
     }
   }
 }
+
 const score = computed(() => result.value?.score ?? 0)
+
+const formatTime = (seconds: number | null): string => {
+  if (seconds === null) return '--:--'
+  const mins = Math.floor(seconds / 60)
+  const secs = seconds % 60
+  return `${mins}:${secs.toString().padStart(2, '0')}`
+}
+
+const acknowledgesPause = () => {
+  pauseAcknowledged.value = true
+}
+
+/**
+ * Polls the quiz status to check if it's been paused or if time has run out
+ */
+const pollQuizStatus = async () => {
+  if (submitted.value) return
+  
+  try {
+    const quizId = props.quiz.uuid || props.quiz.id
+    const response = await fetch(
+      `${API_URL}/courses/${props.courseId}/quizzes/${quizId}`
+    )
+    if (response.ok) {
+      const quizData = await response.json()
+      
+      // Check pause status
+      const wasPaused = isPaused.value
+      isPaused.value = quizData.isPaused || false
+      pauseAcknowledged.value = false
+      
+      // If just paused, show overlay
+      if (isPaused.value && !wasPaused) {
+        pauseAcknowledged.value = false
+      }
+    }
+  } catch (err) {
+    console.error('Error polling quiz status:', err)
+  }
+}
+
+/**
+ * Calculates and updates time remaining
+ */
+const updateTimeRemaining = () => {
+  if (!props.quiz.startedAt || !props.quiz.durationMinutes) {
+    timeRemaining.value = null
+    return
+  }
+
+  const startTime = new Date(props.quiz.startedAt).getTime()
+  const now = new Date().getTime()
+  const elapsedSeconds = Math.floor((now - startTime) / 1000)
+  const totalSeconds = props.quiz.durationMinutes * 60
+  const remaining = totalSeconds - elapsedSeconds
+
+  if (remaining <= 0) {
+    timeRemaining.value = 0
+    // Auto-submit when time runs out
+    if (!submitted.value) {
+      submitQuiz()
+    }
+  } else {
+    timeRemaining.value = remaining
+  }
+}
+
 const submitQuiz = async () => {
   try {
     const payload = {
@@ -179,6 +308,23 @@ const submitQuiz = async () => {
     )
   }
 }
+
+onMounted(() => {
+  // Initial status check
+  updateTimeRemaining()
+  pollQuizStatus()
+
+  // Set up polling for quiz status (every 2 seconds)
+  pollInterval = setInterval(pollQuizStatus, 2000)
+
+  // Set up timer for countdown (every second)
+  timerInterval = setInterval(updateTimeRemaining, 1000)
+})
+
+onUnmounted(() => {
+  if (pollInterval) clearInterval(pollInterval)
+  if (timerInterval) clearInterval(timerInterval)
+})
 </script>
 <style scoped>
 </style>

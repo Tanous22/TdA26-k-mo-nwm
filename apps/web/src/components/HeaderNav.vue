@@ -21,6 +21,9 @@
       <router-link to="/courses" :class="navLinkClass('courses')">
         Kurzy
       </router-link>
+      <router-link to="/archive" :class="navLinkClass('archive')">
+        Archiv
+      </router-link>
       <router-link
         v-if="user && isTeacher"
         to="/dashboard"
@@ -42,7 +45,27 @@
       </svg>
     </button>
 
-    <div class="hidden md:flex gap-4 items-center">
+    <div class="hidden md:flex gap-4 items-center relative">
+      <!-- Bell Notification Icon (only on course pages) -->
+      <button
+        v-if="user && currentCourseId"
+        @click="feedPopoverOpen = !feedPopoverOpen"
+        class="p-2 text-[#0257A5] hover:bg-gray-100 rounded-lg transition-colors relative"
+        title="Feed kurzu"
+      >
+        <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9"/>
+        </svg>
+      </button>
+
+      <!-- Feed Popover -->
+      <div
+        v-if="feedPopoverOpen && user && currentCourseId"
+        class="absolute top-full right-0 mt-2 w-80 bg-white rounded-lg shadow-xl border border-gray-200 z-50 max-h-96 overflow-hidden"
+      >
+        <FeedPanel :courseId="currentCourseId" />
+      </div>
+
       <span v-if="user" class="text-sm text-gray-600 font-semibold">
         {{ user.name }}
         <span v-if="isTeacher" class="text-xs bg-[#91F5AD] text-[#1A1A1A] px-2 py-1 rounded-full ml-2">
@@ -101,6 +124,13 @@
         >
           Kurzy
         </router-link>
+        <router-link 
+          to="/archive" 
+          @click="mobileMenuOpen = false"
+          class="font-bold text-lg text-[#1A1A1A] hover:text-[#0070BB]"
+        >
+          Archiv
+        </router-link>
         <router-link
           v-if="user && isTeacher"
           to="/dashboard"
@@ -132,13 +162,22 @@
   </div>
 </template>
 <script setup lang="ts">
-import { ref } from "vue";
+import { ref, computed } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { useAuth } from "../composables/useAuth";
+import FeedPanel from "./FeedPanel.vue";
+
 const route = useRoute();
 const router = useRouter();
 const { user, isTeacher, logout: authLogout } = useAuth();
 const mobileMenuOpen = ref(false);
+const feedPopoverOpen = ref(false);
+
+// Get the current course ID from the route, default to the first available course
+const currentCourseId = computed(() => {
+  return (route.params.courseId as string) || "";
+});
+
 const navLinkClass = (viewName: string) => {
   const base =
     "font-bold text-lg uppercase tracking-wide transition-colors decoration-2 underline-offset-4 no-underline";
@@ -146,6 +185,7 @@ const navLinkClass = (viewName: string) => {
   if (isActive) return `${base} text-[#0070BB] underline`;
   return `${base} text-[#1A1A1A] hover:text-[#0070BB]`;
 };
+
 const logout = async () => {
   await authLogout();
   router.push("/login");
