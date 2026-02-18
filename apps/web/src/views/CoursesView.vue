@@ -99,6 +99,7 @@ const fetchCourses = async () => {
       category: course.category || categories[1 + (index % 4)],
       materials: course.materials || [],
       quizzes: course.quizzes || [],
+      publishedAt: course.publishedAt // added publishedAt
     }))
   } catch (err) {
     showError(

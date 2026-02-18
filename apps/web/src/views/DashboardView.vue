@@ -64,10 +64,17 @@
           <p class="text-gray-500 text-sm mb-3 line-clamp-2">
             {{ course.description }}
           </p>
-          <div class="flex gap-4 text-sm font-bold text-[#0070BB]">
+            <div class="flex gap-4 text-sm font-bold text-[#0070BB]">
             <span class="flex items-center gap-1">
               📄 Materiály ({{ course.materials?.length || 0 }})
             </span>
+            <button
+              @click="toggleCourseStatus(course)"
+              class="hover:underline flex items-center gap-1"
+              :class="course.publishedAt ? 'text-orange-500' : 'text-green-600'"
+            >
+              {{ course.publishedAt ? '⏸️ Pozastavit' : '▶️ Spustit' }}
+            </button>
             <button
               @click="openModal(course)"
               class="hover:underline flex items-center gap-1"
@@ -115,6 +122,7 @@ interface Course {
   difficulty?: string;
   color?: string;
   materials?: any[];
+  publishedAt?: string | null; // Added publishedAt
 }
 const apiUrl = import.meta.env.VITE_API_URL || '/api';
 const { success: showSuccess, error: showError } = useNotifications();
@@ -147,12 +155,13 @@ const fetchCourses = async () => {
     const response = await fetch(`${apiUrl}/courses`);
     if (!response.ok) throw new Error("Failed to fetch courses");
     const data = await response.json();
-    courses.value = data.map((course: Course, index: number) => ({
+    courses.value = data.map((course: any, index: number) => ({
       ...course,
       difficulty:
         course.difficulty || ["Jednoduchý", "Střední", "Těžký", "Extrém"][index % 4],
       color: ["#91F5AD", "#0070BB", "#FF6B6B", "#FFD93D"][index % 4],
       category: course.category || "Programování",
+      publishedAt: course.publishedAt // Map publishedAt
     }));
   } catch (err) {
     error.value =
@@ -160,6 +169,46 @@ const fetchCourses = async () => {
     console.error("Error fetching courses:", err);
   } finally {
     loading.value = false;
+  }
+};
+
+const toggleCourseStatus = async (course: Course) => {
+  if (!course.uuid) return;
+  const isPaused = !course.publishedAt;
+  const newPublishedAt = isPaused ? new Date().toISOString() : null;
+  const actionName = isPaused ? "Spuštění" : "Pozastavení";
+
+  try {
+    // We need to send the full course object as per API requirement (from analysis)
+    const payload = {
+      ...course,
+      publishedAt: newPublishedAt,
+      // Ensure materials are not sent if they cause issues, or send basic mapping if needed. 
+      // Based on saveCourse logic, the PUT endpoint expects body with name, description etc.
+      // We will send what we have in the course object.
+      materials: [], // We don't want to update materials here, just metadata
+      quizzes: []   // Same for quizzes
+    };
+
+    console.log(`[Dashboard] ${actionName} kurzu: ${course.name}`);
+    
+    const response = await fetch(`${apiUrl}/courses/${course.uuid}`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+
+    if (!response.ok) {
+       const errorText = await response.text();
+       throw new Error(`Chyba ${response.status}: ${errorText || response.statusText}`);
+    }
+
+    await fetchCourses(); // Refresh list to get updated status
+    showSuccess(`Kurz ${isPaused ? "spuštěn" : "pozastaven"}`);
+
+  } catch (err: any) {
+    console.error(`Error toggling course status:`, err);
+    showError(`Nepodařilo se změnit stav kurzu: ${err.message}`);
   }
 };
 const openModal = (course?: Course) => {
