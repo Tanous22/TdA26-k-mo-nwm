@@ -18,13 +18,14 @@ const parseJson = (data: any) => {
     return data;
 };
 
-// ZDE JE OPRAVA PRO DATUM - Převod do MySQL formátu
+// BEZPEČNÝ PŘEVOD DATA PRO VŠECHNY PROHLÍŽEČE
 const formatForMySQL = (dateString: string | null) => {
     if (!dateString) return null;
-    const d = new Date(dateString);
+    const safeDateStr = dateString.includes('T') ? dateString : dateString.replace(' ', 'T');
+    const d = new Date(safeDateStr);
+    
     if (isNaN(d.getTime())) return null;
     
-    // Extrahujeme přesný lokální čas bez posunu do UTC
     const year = d.getFullYear();
     const month = String(d.getMonth() + 1).padStart(2, '0');
     const day = String(d.getDate()).padStart(2, '0');
@@ -42,13 +43,13 @@ interface Course {
     difficulty: string;
     category: string;
     publishedAt?: string | null;
+    endsAt?: string | null;
     materials: any[];
     quizzes: any[];
     feed: any[];
 }
 
 const getFullCourseData = async (courseId: string) => {
-    // FILTRACE SMAZANÝCH KURZŮ
     const [rows] = await pool.execute("SELECT * FROM courses WHERE uuid = ? AND deleted_at IS NULL", [courseId]);
     const courseData = (rows as any[])[0];
     if (!courseData) return null;
@@ -113,17 +114,48 @@ const getFullCourseData = async (courseId: string) => {
         difficulty: courseData.difficulty || "",
         category: courseData.category || "Programování",
         publishedAt: courseData.published_at,
-        isPaused: Boolean(courseData.is_paused), // POSÍLÁME IS_PAUSED
+        endsAt: courseData.ends_at, // ODESÍLÁNÍ ENDS_AT DO FRONTENDU
+        isPaused: Boolean(courseData.is_paused),
         materials,
         quizzes,
         feed
     };
 };
 
+// ENDPOINT PRO ARCHIV
+coursesRouter.get("/archived/all", async (req: Request, res: Response) => {
+    try {
+        // Vybere smazané NEBO exspirované kurzy
+        const [rows] = await pool.execute(`
+            SELECT * FROM courses 
+            WHERE deleted_at IS NOT NULL OR (ends_at IS NOT NULL AND ends_at <= NOW()) 
+            ORDER BY COALESCE(deleted_at, ends_at) DESC
+        `);
+        const archivedCourses = (rows as any[]).map(row => ({
+            uuid: row.uuid,
+            name: row.name,
+            description: row.description,
+            difficulty: row.difficulty || "",
+            category: row.category || "Programování",
+            deletedAt: row.deleted_at,
+            endsAt: row.ends_at
+        }));
+        
+        res.status(200).json(archivedCourses);
+    } catch (error) {
+        console.error("Error fetching archived courses:", error);
+        res.status(500).json({ error: "Database error" });
+    }
+});
+
 coursesRouter.get("/", async (req: Request, res: Response) => {
     try {
-        // FILTRACE SMAZANÝCH KURZŮ
-        const [rows] = await pool.execute("SELECT * FROM courses WHERE deleted_at IS NULL ORDER BY created_at DESC");
+        // VÝPIS KURZŮ: SCHOVÁ SMAZANÉ A EXSPIROVANÉ
+        const [rows] = await pool.execute(`
+            SELECT * FROM courses 
+            WHERE deleted_at IS NULL AND (ends_at IS NULL OR ends_at > NOW()) 
+            ORDER BY created_at DESC
+        `);
         const courses = [];
 
         for (const row of (rows as any[])) {
@@ -166,7 +198,8 @@ coursesRouter.get("/", async (req: Request, res: Response) => {
                 difficulty: row.difficulty || "",
                 category: row.category || "Programování",
                 publishedAt: row.published_at,
-                isPaused: Boolean(row.is_paused), // POSÍLÁME IS_PAUSED
+                endsAt: row.ends_at, // ODESÍLÁNÍ ENDS_AT DO FRONTENDU
+                isPaused: Boolean(row.is_paused),
                 materials,
                 quizzes,
                 feed: []
@@ -185,15 +218,17 @@ coursesRouter.post("/", async (req: Request, res: Response) => {
         return;
     }
     const uuid = uuidv4();
-    const { name, description = "", difficulty = "", category = "Programování", publishedAt = null } = req.body;
+    // ZÍSKÁVÁNÍ ENDS_AT Z REQUESTU
+    const { name, description = "", difficulty = "", category = "Programování", publishedAt = null, endsAt = null } = req.body;
     
-    // PŘEVOD DATA
     const mysqlPublishedAt = formatForMySQL(publishedAt);
+    const mysqlEndsAt = formatForMySQL(endsAt);
 
     try {
+        // UKLÁDÁNÍ ENDS_AT DO DATABÁZE
         const [result] = await pool.execute(
-            "INSERT INTO courses (uuid, name, description, difficulty, category, published_at) VALUES (?, ?, ?, ?, ?, ?)",
-            [uuid, name, description, difficulty, category, mysqlPublishedAt]
+            "INSERT INTO courses (uuid, name, description, difficulty, category, published_at, ends_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
+            [uuid, name, description, difficulty, category, mysqlPublishedAt, mysqlEndsAt]
         );
         const courseId = (result as any).insertId;
 
@@ -216,30 +251,9 @@ coursesRouter.post("/", async (req: Request, res: Response) => {
             console.error("[Courses] Nepodařilo se zapsat do feedu:", feedError);
         }
 
-        res.status(201).json({ uuid, name, description, difficulty, category, publishedAt: publishedAt || null, materials: [], quizzes: [], feed: [] });
+        res.status(201).json({ uuid, name, description, difficulty, category, publishedAt: publishedAt || null, endsAt: endsAt || null, materials: [], quizzes: [], feed: [] });
     } catch (error) {
         console.error("Error creating course:", error);
-        res.status(500).json({ error: "Database error" });
-    }
-});
-
-// ENDPOINT PRO ARCHIV KURZŮ
-coursesRouter.get("/archived/all", async (req: Request, res: Response) => {
-    try {
-        // Vybere pouze kurzy, které MAJÍ vyplněné deleted_at (jsou smazané)
-        const [rows] = await pool.execute("SELECT * FROM courses WHERE deleted_at IS NOT NULL ORDER BY deleted_at DESC");
-        const archivedCourses = (rows as any[]).map(row => ({
-            uuid: row.uuid,
-            name: row.name,
-            description: row.description,
-            difficulty: row.difficulty || "",
-            category: row.category || "Programování",
-            deletedAt: row.deleted_at
-        }));
-        
-        res.status(200).json(archivedCourses);
-    } catch (error) {
-        console.error("Error fetching archived courses:", error);
         res.status(500).json({ error: "Database error" });
     }
 });
@@ -261,16 +275,17 @@ coursesRouter.get("/:courseId", async (req: Request, res: Response) => {
 
 coursesRouter.put("/:courseId", async (req: Request, res: Response) => {
     const { courseId } = req.params;
-    const { name, description, difficulty, category, publishedAt } = req.body;
+    // ZÍSKÁVÁNÍ ENDS_AT Z REQUESTU
+    const { name, description, difficulty, category, publishedAt, endsAt } = req.body;
     
-    // PŘEVOD DATA
     const mysqlPublishedAt = formatForMySQL(publishedAt);
+    const mysqlEndsAt = formatForMySQL(endsAt);
 
     try {
-        // FILTRACE SMAZANÝCH KURZŮ
+        // AKTUALIZACE ENDS_AT V DATABÁZI
         const [result] = await pool.execute(
-            "UPDATE courses SET name = ?, description = ?, difficulty = ?, category = ?, published_at = ? WHERE uuid = ? AND deleted_at IS NULL",
-            [name, description, difficulty || "", category || "Programování", mysqlPublishedAt, courseId]
+            "UPDATE courses SET name = ?, description = ?, difficulty = ?, category = ?, published_at = ?, ends_at = ? WHERE uuid = ? AND deleted_at IS NULL",
+            [name, description, difficulty || "", category || "Programování", mysqlPublishedAt, mysqlEndsAt, courseId]
         );
 
         if ((result as any).affectedRows === 0) {
@@ -312,7 +327,6 @@ coursesRouter.put("/:courseId", async (req: Request, res: Response) => {
 coursesRouter.delete("/:courseId", async (req: Request, res: Response) => {
     const { courseId } = req.params;
     try {
-        // SOFT DELETE MÍSTO SKUTEČNÉHO MAZÁNÍ
         const [result] = await pool.execute("UPDATE courses SET deleted_at = NOW() WHERE uuid = ?", [courseId]);
         
         if ((result as any).affectedRows === 0) {
@@ -327,7 +341,6 @@ coursesRouter.delete("/:courseId", async (req: Request, res: Response) => {
     }
 });
 
-// ZDE JE ENDPOINT PRO POZASTAVENÍ KURZŮ
 coursesRouter.post("/:courseId/control", async (req: Request, res: Response) => {
     const { courseId } = req.params;
     const { action } = req.body;
