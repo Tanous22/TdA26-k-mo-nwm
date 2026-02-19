@@ -150,7 +150,6 @@
             </div>
           </div>
         </div>
-        <!-- FeedPanel removed from course page; use bell popover feed in HeaderNav -->
       </div>
     </div>
     <div
@@ -183,13 +182,13 @@
     />
   </div>
 </template>
+
 <script setup lang="ts">
 import { ref, onMounted, nextTick } from 'vue'
-import { useRoute } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import QuizRunner, { type Quiz } from '../components/QuizRunner.vue'
 import QuizModal from '../components/QuizModal.vue'
 import ConfirmationModal from '../components/ConfirmationModal.vue'
-// FeedPanel intentionally not imported here; bell icon in HeaderNav shows course feed
 import { useAuth } from '../composables/useAuth'
 import { useNotifications } from '../composables/useNotifications'
 import {
@@ -198,7 +197,9 @@ import {
   getMaterialIcon,
   type Course,
 } from '../composables/useModels'
+
 const route = useRoute()
+const router = useRouter()
 const { isTeacher } = useAuth()
 const { success, error: showError } = useNotifications()
 const courseId = (route.params.courseId || route.params.uuid) as string
@@ -212,12 +213,26 @@ const course = ref<Course | null>(null)
 const showDeleteModal = ref(false)
 const quizIdToDelete = ref<string | null>(null)
 const isUploading = ref(false)
+
 const fetchCourse = async () => {
   try {
     loading.value = true
     const response = await fetch(`${API_URL}/courses/${courseId}`)
     if (!response.ok) throw new Error('Failed to fetch course')
     const data = await response.json()
+
+    // OCHRANA PROTI PŘÍSTUPU STUDENTŮ K NEDOSTUPNÝM KURZŮM
+    if (!isTeacher.value) {
+      const isPaused = Boolean(data.isPaused);
+      const isScheduled = data.publishedAt && new Date(data.publishedAt) > new Date();
+      
+      if (isPaused || isScheduled) {
+        showError('Tento kurz momentálně není přístupný.');
+        router.push('/courses');
+        return;
+      }
+    }
+
     course.value = data
   } catch (err) {
     showError(
@@ -228,6 +243,7 @@ const fetchCourse = async () => {
     loading.value = false
   }
 }
+
 const handleAddLink = async () => {
   const url = prompt('Zadejte URL odkazu:')
   if (!url) return
@@ -256,7 +272,9 @@ const handleAddLink = async () => {
     loading.value = false
   }
 }
+
 const triggerFileUpload = () => fileInput.value?.click()
+
 const handleFileUpload = async (event: Event) => {
   const file = (event.target as HTMLInputElement).files?.[0]
   if (!file) return
@@ -283,14 +301,17 @@ const handleFileUpload = async (event: Event) => {
     if (fileInput.value) fileInput.value.value = ''
   }
 }
+
 const openQuizModal = () => {
   editingQuiz.value = null
   showQuizModal.value = true
 }
+
 const closeQuizModal = () => {
   showQuizModal.value = false
   editingQuiz.value = null
 }
+
 const startQuiz = (quiz: any) => {
   const formattedQuestions = (quiz.questions || []).map(
     transformQuestionToFrontend
@@ -300,6 +321,7 @@ const startQuiz = (quiz: any) => {
     questions: formattedQuestions,
   }
 }
+
 const editQuiz = async (quiz: any) => {
   try {
     const response = await fetch(
@@ -322,10 +344,12 @@ const editQuiz = async (quiz: any) => {
     )
   }
 }
+
 const openDeleteModal = (quizUuid: string) => {
   quizIdToDelete.value = quizUuid
   showDeleteModal.value = true
 }
+
 const confirmDelete = async () => {
   if (!quizIdToDelete.value) return
   try {
@@ -345,6 +369,7 @@ const confirmDelete = async () => {
     quizIdToDelete.value = null
   }
 }
+
 const handleQuizSave = async (quizData: any) => {
   try {
     const backendQuestions = quizData.questions.map(transformQuestionToBackend)
@@ -375,9 +400,11 @@ const handleQuizSave = async (quizData: any) => {
     )
   }
 }
+
 onMounted(() => {
   fetchCourse()
 })
 </script>
+
 <style scoped>
 </style>

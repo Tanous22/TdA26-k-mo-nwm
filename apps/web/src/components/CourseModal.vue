@@ -182,7 +182,9 @@
 import { ref, watch, nextTick } from "vue";
 import QuizModal from "./QuizModal.vue";
 import ConfirmationModal from "./ConfirmationModal.vue";
+
 const apiUrl = import.meta.env.VITE_API_URL || '/api';
+
 interface Material {
   type: "url" | "file" | "quiz";
   value: string;
@@ -190,6 +192,7 @@ interface Material {
   data?: any; 
   uuid?: string; 
 }
+
 interface Course {
   uuid?: string;
   name: string;
@@ -200,15 +203,18 @@ interface Course {
   materials?: Material[];
   quizzes?: any[];
 }
+
 const props = defineProps<{
   show: boolean;
   course?: Course | null;
   categories: string[];
 }>();
+
 const emit = defineEmits<{
   close: [];
   save: [course: Course, isEditing: boolean];
 }>();
+
 const isFormReady = ref(false);
 const isEditing = ref(false);
 const materialType = ref<"url" | "file" | "quiz">("url");
@@ -221,6 +227,7 @@ const currentQuizData = ref<any>(null);
 const showQuizDeleteModal = ref(false);
 const quizIndexToDelete = ref<number | null>(null);
 const modalKey = ref(0);
+
 const defaultFormState = (): Course => ({
   name: "",
   description: "",
@@ -229,7 +236,18 @@ const defaultFormState = (): Course => ({
   publishedAt: null,
   materials: [],
 });
+
+// ZDE PŘIDÁNA FUNKCE PRO ZOBRAZENÍ LOKÁLNÍHO ČASU V HTML INPUTU
+const formatDateTimeForInput = (dateStr?: string | null) => {
+  if (!dateStr) return "";
+  const d = new Date(dateStr);
+  if (isNaN(d.getTime())) return "";
+  d.setMinutes(d.getMinutes() - d.getTimezoneOffset());
+  return d.toISOString().slice(0, 16);
+};
+
 const formData = ref<Course>(defaultFormState());
+
 const initForm = async () => {
   try {
       console.log("[CourseModal] initForm start, props.course=", props.course?.name);
@@ -277,7 +295,7 @@ const initForm = async () => {
             description: safeCourse.description || "",
             category: safeCourse.category || "Programování",
             difficulty: safeCourse.difficulty || "Začátečník",
-            publishedAt: safeCourse.publishedAt || null,
+            publishedAt: formatDateTimeForInput(safeCourse.publishedAt), // PŘEVOD PRO HTML INPUT
             materials: mergedMaterials
           };
       } else {
@@ -298,6 +316,7 @@ const initForm = async () => {
       console.log("[CourseModal] initForm done, isFormReady=true, formData.name=", formData.value.name);
   }
 };
+
 watch(
   () => props.show,
   async (isOpen) => {
@@ -316,6 +335,7 @@ watch(
   },
   { immediate: true }
 );
+
 const handleFileUpload = (event: Event) => {
   const target = event.target as HTMLInputElement;
   if (target.files && target.files.length > 0) {
@@ -330,6 +350,7 @@ const handleFileUpload = (event: Event) => {
     target.value = "";
   }
 };
+
 const addMaterial = () => {
   if (!formData.value.materials) {
       formData.value.materials = [];
@@ -358,6 +379,7 @@ const addMaterial = () => {
     }
   }
 };
+
 const removeMaterial = async (index: number) => {
   if (!formData.value.materials) return;
   const material = formData.value.materials[index];
@@ -383,6 +405,7 @@ const removeMaterial = async (index: number) => {
   }
   formData.value.materials.splice(index, 1);
 };
+
 const confirmQuizDelete = async () => {
   if (quizIndexToDelete.value === null || !formData.value.materials) return;
   const material = formData.value.materials[quizIndexToDelete.value];
@@ -400,12 +423,15 @@ const confirmQuizDelete = async () => {
   showQuizDeleteModal.value = false;
   quizIndexToDelete.value = null;
 };
+
 const saveCourse = async () => {
   emit("save", { ...formData.value }, isEditing.value);
 };
+
 const close = () => {
   emit("close");
 };
+
 const openQuizModal = async (index: number | null = null) => {
   try {
       editingQuizIndex.value = index;
@@ -460,6 +486,7 @@ const openQuizModal = async (index: number | null = null) => {
       console.error("[CourseModal] Error in openQuizModal:", err);
   }
 };
+
 const handleQuizSave = (quiz: any) => {
   if (!formData.value.materials) {
       formData.value.materials = [];

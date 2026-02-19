@@ -254,7 +254,7 @@ quizzesRouter.get("/:quizId", async (req: Request, res: Response) => {
 });
 quizzesRouter.put("/:quizId", async (req: Request, res: Response) => {
     const { quizId, courseId } = req.params;
-    const { title, questions, scheduledAt, durationMinutes, publishedAt } = req.body;
+    const { title, questions, scheduledAt, scheduledEnd, durationMinutes, publishedAt } = req.body;
     console.log(`[DEBUG-QUIZ] PUT /${quizId} HIT - Smart Update`);
     try {
         const [rows] = await pool.execute("SELECT id, course_id FROM quizzes WHERE uuid = ? AND deleted_at IS NULL", [quizId]);

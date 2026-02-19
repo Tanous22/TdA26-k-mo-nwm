@@ -51,12 +51,14 @@
     </div>
   </div>
 </template>
+
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import CourseCard from '../components/CourseCard.vue'
 import { useNotifications } from '../composables/useNotifications'
 import { useApi } from '../composables/useApi'
+
 interface Course {
   uuid: string
   name: string
@@ -65,7 +67,10 @@ interface Course {
   category?: string
   materials: any[]
   quizzes: any[]
+  publishedAt?: string | null
+  isPaused?: boolean
 }
+
 const router = useRouter()
 const { API_URL } = useApi()
 const { error: showError } = useNotifications()
@@ -74,6 +79,7 @@ const activeCategory = ref('Všechny')
 const categories = ['Všechny', 'Programování', 'Design & Art', 'Marketing', 'Soft Skills']
 const courses = ref<Course[]>([])
 const loading = ref(true)
+
 const filteredCourses = computed(() => {
   return courses.value.filter((course) => {
     const matchesSearch = course.name
@@ -84,23 +90,24 @@ const filteredCourses = computed(() => {
     return matchesSearch && matchesCategory
   })
 })
+
 const fetchCourses = async () => {
   try {
     loading.value = true
     const response = await fetch(`${API_URL}/courses`)
     if (!response.ok) throw new Error('Failed to fetch courses')
     const data = await response.json()
+    
     courses.value = data.map((course: any, index: number) => ({
       uuid: course.uuid,
       name: course.name,
       description: course.description,
-      difficulty:
-        course.difficulty || ['Jednoduchý', 'Střední', 'Těžký', 'Extrém'][index % 4],
+      difficulty: course.difficulty || ['Jednoduchý', 'Střední', 'Těžký', 'Extrém'][index % 4],
       category: course.category || categories[1 + (index % 4)],
       materials: course.materials || [],
       quizzes: course.quizzes || [],
       publishedAt: course.publishedAt,
-      isPaused: Boolean(course.isPaused) // ZDE JE PŘIDANÝ NOVÝ STAV
+      isPaused: Boolean(course.isPaused)
     }))
   } catch (err) {
     showError(
@@ -110,14 +117,15 @@ const fetchCourses = async () => {
     loading.value = false
   }
 }
+
 const viewCourse = (course: Course) => {
   router.push({
     name: 'course-detail',
     params: { courseId: course.uuid },
   })
 }
+
 onMounted(() => {
   fetchCourses()
 })
 </script>
-<style scoped></style>
