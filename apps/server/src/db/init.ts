@@ -24,6 +24,8 @@ export async function initDatabase() {
         difficulty VARCHAR(50) DEFAULT 'Jednoduchý',
         category VARCHAR(100) DEFAULT 'Programování',
         published_at DATETIME NULL,
+        is_paused BOOLEAN DEFAULT 0,
+        deleted_at DATETIME NULL,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
       )

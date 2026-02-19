@@ -28,6 +28,8 @@ export interface Course {
     difficulty?: string
     materials: Material[]
     quizzes: Quiz[]
+    isPaused?: boolean
+    publishedAt?: string | null
 }
 export interface FeedMessage {
     uuid: string

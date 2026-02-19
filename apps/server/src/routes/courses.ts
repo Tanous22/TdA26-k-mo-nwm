@@ -18,6 +18,11 @@ const parseJson = (data: any) => {
     return data;
 };
 
+const formatForMySQL = (dateString: string | null) => {
+    if (!dateString) return null;
+    return new Date(dateString).toISOString().slice(0, 19).replace('T', ' ');
+};
+
 interface Course {
     uuid: string;
     name: string;
@@ -31,7 +36,7 @@ interface Course {
 }
 
 const getFullCourseData = async (courseId: string) => {
-    const [rows] = await pool.execute("SELECT * FROM courses WHERE uuid = ?", [courseId]);
+    const [rows] = await pool.execute("SELECT * FROM courses WHERE uuid = ? AND deleted_at IS NULL", [courseId]);
     const courseData = (rows as any[])[0];
     if (!courseData) return null;
 
@@ -49,7 +54,6 @@ const getFullCourseData = async (courseId: string) => {
             description: m.description,
             mimeType: m.mime_type,
             url: m.type === 'url' ? m.content : undefined,
-            // ZDE JE ZMĚNA 1: Přidáno /api
             fileUrl: m.type === 'file' ? `/api/uploads/${m.content}` : undefined
         }));
 
@@ -96,6 +100,7 @@ const getFullCourseData = async (courseId: string) => {
         difficulty: courseData.difficulty || "",
         category: courseData.category || "Programování",
         publishedAt: courseData.published_at,
+        isPaused: Boolean(courseData.is_paused),
         materials,
         quizzes,
         feed
@@ -104,7 +109,7 @@ const getFullCourseData = async (courseId: string) => {
 
 coursesRouter.get("/", async (req: Request, res: Response) => {
     try {
-        const [rows] = await pool.execute("SELECT * FROM courses ORDER BY created_at DESC");
+        const [rows] = await pool.execute("SELECT * FROM courses WHERE deleted_at IS NULL ORDER BY created_at DESC");
         const courses = [];
 
         for (const row of (rows as any[])) {
@@ -120,7 +125,6 @@ coursesRouter.get("/", async (req: Request, res: Response) => {
                 description: m.description,
                 mimeType: m.mime_type,
                 url: m.type === 'url' ? m.content : undefined,
-                // ZDE JE ZMĚNA 2: Přidáno /api
                 fileUrl: m.type === 'file' ? `/api/uploads/${m.content}` : undefined
             }));
 
@@ -148,6 +152,7 @@ coursesRouter.get("/", async (req: Request, res: Response) => {
                 difficulty: row.difficulty || "",
                 category: row.category || "Programování",
                 publishedAt: row.published_at,
+                isPaused: Boolean(row.is_paused),
                 materials,
                 quizzes,
                 feed: []
@@ -160,7 +165,6 @@ coursesRouter.get("/", async (req: Request, res: Response) => {
     }
 });
 
-// Zbytek souboru zůstává stejný (POST, GET :id, PUT, DELETE)
 coursesRouter.post("/", async (req: Request, res: Response) => {
     if (!req.body || !req.body.name) {
         res.status(400).json({ error: "Missing data" });
@@ -168,11 +172,13 @@ coursesRouter.post("/", async (req: Request, res: Response) => {
     }
     const uuid = uuidv4();
     const { name, description = "", difficulty = "", category = "Programování", publishedAt = null } = req.body;
+    
+    const mysqlPublishedAt = formatForMySQL(publishedAt);
 
     try {
         const [result] = await pool.execute(
             "INSERT INTO courses (uuid, name, description, difficulty, category, published_at) VALUES (?, ?, ?, ?, ?, ?)",
-            [uuid, name, description, difficulty, category, publishedAt || null]
+            [uuid, name, description, difficulty, category, mysqlPublishedAt]
         );
         const courseId = (result as any).insertId;
 
@@ -220,11 +226,13 @@ coursesRouter.get("/:courseId", async (req: Request, res: Response) => {
 coursesRouter.put("/:courseId", async (req: Request, res: Response) => {
     const { courseId } = req.params;
     const { name, description, difficulty, category, publishedAt } = req.body;
+    
+    const mysqlPublishedAt = formatForMySQL(publishedAt);
 
     try {
         const [result] = await pool.execute(
-            "UPDATE courses SET name = ?, description = ?, difficulty = ?, category = ?, published_at = ? WHERE uuid = ?",
-            [name, description, difficulty || "", category || "Programování", publishedAt || null, courseId]
+            "UPDATE courses SET name = ?, description = ?, difficulty = ?, category = ?, published_at = ? WHERE uuid = ? AND deleted_at IS NULL",
+            [name, description, difficulty || "", category || "Programování", mysqlPublishedAt, courseId]
         );
 
         if ((result as any).affectedRows === 0) {
@@ -266,7 +274,7 @@ coursesRouter.put("/:courseId", async (req: Request, res: Response) => {
 coursesRouter.delete("/:courseId", async (req: Request, res: Response) => {
     const { courseId } = req.params;
     try {
-        const [result] = await pool.execute("DELETE FROM courses WHERE uuid = ?", [courseId]);
+        const [result] = await pool.execute("UPDATE courses SET deleted_at = NOW() WHERE uuid = ?", [courseId]);
         
         if ((result as any).affectedRows === 0) {
             res.status(404).json({ error: "Not found" });
@@ -276,6 +284,38 @@ coursesRouter.delete("/:courseId", async (req: Request, res: Response) => {
         res.status(204).send();
     } catch (error) {
         console.error("Error deleting course:", error);
+        res.status(500).json({ error: "Database error" });
+    }
+});
+
+coursesRouter.post("/:courseId/control", async (req: Request, res: Response) => {
+    const { courseId } = req.params;
+    const { action } = req.body;
+
+    if (action !== "pause" && action !== "resume") {
+        res.status(400).json({ error: "Neplatná akce. Použijte 'pause' nebo 'resume'." });
+        return;
+    }
+
+    const isPausedValue = action === "pause" ? 1 : 0;
+
+    try {
+        const [result] = await pool.execute(
+            "UPDATE courses SET is_paused = ? WHERE uuid = ? AND deleted_at IS NULL",
+            [isPausedValue, courseId]
+        );
+
+        if ((result as any).affectedRows === 0) {
+            res.status(404).json({ error: "Kurz nenalezen nebo je smazán" });
+            return;
+        }
+
+        res.status(200).json({ 
+            message: `Kurz byl úspěšně ${action === "pause" ? "pozastaven" : "spuštěn"}`,
+            isPaused: Boolean(isPausedValue) 
+        });
+    } catch (error) {
+        console.error("Error controlling course:", error);
         res.status(500).json({ error: "Database error" });
     }
 });

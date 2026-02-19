@@ -71,9 +71,9 @@
             <button
               @click="toggleCourseStatus(course)"
               class="hover:underline flex items-center gap-1"
-              :class="course.publishedAt ? 'text-orange-500' : 'text-green-600'"
+              :class="!course.isPaused ? 'text-orange-500' : 'text-green-600'"
             >
-              {{ course.publishedAt ? '⏸️ Pozastavit' : '▶️ Spustit' }}
+              {{ !course.isPaused ? '⏸️ Pozastavit' : '▶️ Spustit' }}
             </button>
             <button
               @click="openModal(course)"
@@ -109,11 +109,13 @@
     />
   </div>
 </template>
+
 <script setup lang="ts">
 import { ref, onMounted } from "vue";
 import CourseModal from "../components/CourseModal.vue";
 import ConfirmationModal from "../components/ConfirmationModal.vue";
 import { useNotifications } from "../composables/useNotifications";
+
 interface Course {
   uuid?: string;
   name: string;
@@ -122,8 +124,10 @@ interface Course {
   difficulty?: string;
   color?: string;
   materials?: any[];
-  publishedAt?: string | null; // Added publishedAt
+  publishedAt?: string | null;
+  isPaused?: boolean; // PŘIDÁNO
 }
+
 const apiUrl = import.meta.env.VITE_API_URL || '/api';
 const { success: showSuccess, error: showError } = useNotifications();
 const categories = ["Programování", "Design & Art", "Marketing", "Soft Skills"];
@@ -134,6 +138,7 @@ const editingCourse = ref<Course | null>(null);
 const courseToDeleteId = ref<string | null>(null);
 const loading = ref(true);
 const error = ref("");
+
 const getDifficultyColor = (diff?: string) => {
   if (diff === "Jednoduchý") return "#91F5AD";
   if (diff === "Střední") return "#FFD93D";
@@ -141,6 +146,7 @@ const getDifficultyColor = (diff?: string) => {
   if (diff === "Extrém") return "#8B00FF";
   return "#F9F9F9";
 };
+
 const getDifficultyIcon = (diff?: string) => {
   if (diff === "Jednoduchý") return new URL('../assets/icons/easy.svg', import.meta.url).href;
   if (diff === "Střední") return new URL('../assets/icons/medium.svg', import.meta.url).href;
@@ -148,6 +154,7 @@ const getDifficultyIcon = (diff?: string) => {
   if (diff === "Extrém") return new URL('../assets/icons/extreme.svg', import.meta.url).href;
   return new URL('../assets/icons/easy.svg', import.meta.url).href;
 };
+
 const fetchCourses = async () => {
   try {
     loading.value = true;
@@ -157,15 +164,14 @@ const fetchCourses = async () => {
     const data = await response.json();
     courses.value = data.map((course: any, index: number) => ({
       ...course,
-      difficulty:
-        course.difficulty || ["Jednoduchý", "Střední", "Těžký", "Extrém"][index % 4],
+      difficulty: course.difficulty || ["Jednoduchý", "Střední", "Těžký", "Extrém"][index % 4],
       color: ["#91F5AD", "#0070BB", "#FF6B6B", "#FFD93D"][index % 4],
       category: course.category || "Programování",
-      publishedAt: course.publishedAt // Map publishedAt
+      publishedAt: course.publishedAt,
+      isPaused: Boolean(course.isPaused) // PŘIDÁNO
     }));
   } catch (err) {
-    error.value =
-      err instanceof Error ? err.message : "Nepodařilo se načíst kurzy";
+    error.value = err instanceof Error ? err.message : "Nepodařilo se načíst kurzy";
     console.error("Error fetching courses:", err);
   } finally {
     loading.value = false;
@@ -174,28 +180,17 @@ const fetchCourses = async () => {
 
 const toggleCourseStatus = async (course: Course) => {
   if (!course.uuid) return;
-  const isPaused = !course.publishedAt;
-  const newPublishedAt = isPaused ? new Date().toISOString() : null;
-  const actionName = isPaused ? "Spuštění" : "Pozastavení";
+  const action = course.isPaused ? "resume" : "pause";
+  const actionName = course.isPaused ? "Spuštění" : "Pozastavení";
 
   try {
-    // We need to send the full course object as per API requirement (from analysis)
-    const payload = {
-      ...course,
-      publishedAt: newPublishedAt,
-      // Ensure materials are not sent if they cause issues, or send basic mapping if needed. 
-      // Based on saveCourse logic, the PUT endpoint expects body with name, description etc.
-      // We will send what we have in the course object.
-      materials: [], // We don't want to update materials here, just metadata
-      quizzes: []   // Same for quizzes
-    };
-
     console.log(`[Dashboard] ${actionName} kurzu: ${course.name}`);
     
-    const response = await fetch(`${apiUrl}/courses/${course.uuid}`, {
-      method: "PUT",
+    // ZDE JE OPRAVA: Voláme náš nový /control endpoint
+    const response = await fetch(`${apiUrl}/courses/${course.uuid}/control`, {
+      method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload),
+      body: JSON.stringify({ action }),
     });
 
     if (!response.ok) {
@@ -203,49 +198,46 @@ const toggleCourseStatus = async (course: Course) => {
        throw new Error(`Chyba ${response.status}: ${errorText || response.statusText}`);
     }
 
-    await fetchCourses(); // Refresh list to get updated status
-    showSuccess(`Kurz ${isPaused ? "spuštěn" : "pozastaven"}`);
+    await fetchCourses();
+    showSuccess(`Kurz ${course.isPaused ? "spuštěn" : "pozastaven"}`);
 
   } catch (err: any) {
     console.error(`Error toggling course status:`, err);
     showError(`Nepodařilo se změnit stav kurzu: ${err.message}`);
   }
 };
+
 const openModal = (course?: Course) => {
   editingCourse.value = course ? JSON.parse(JSON.stringify(course)) : null;
   console.log("[Dashboard] openModal called, course=", course?.name);
   showModal.value = true;
 };
+
 const saveMaterialSeparately = async (courseId: string, material: any) => {
   try {
-    console.log(`[Dashboard] Nahrávám materiál: ${material.value} (${material.type})`);
     const formData = new FormData();
     formData.append('name', material.value); 
     formData.append('type', material.type);
     formData.append('description', ''); 
     if (material.type === 'file') {
-       if (!material.file) {
-           console.warn(`[Dashboard] Materiál '${material.value}' nemá soubor, přeskakuji.`);
-           return;
-       }
+       if (!material.file) return;
        formData.append('file', material.file);
     } else if (material.type === 'url') {
        formData.append('url', material.value);
     }
     const response = await fetch(`${apiUrl}/courses/${courseId}/materials`, {
       method: 'POST',
-      body: formData, // Browser automaticky nastaví multipart/form-data
+      body: formData,
     });
     if (!response.ok) {
         const errText = await response.text();
         throw new Error(`Chyba nahrávání (${response.status}): ${errText}`);
     }
-    console.log(`[Dashboard] Materiál '${material.value}' úspěšně nahrán.`);
   } catch (err) {
-    console.error(`[Dashboard] Chyba saveMaterialSeparately:`, err);
     showError(`Nepodařilo se nahrát materiál: ${material.value}`);
   }
 };
+
 const saveCourse = async (courseData: Course, isEditing: boolean) => {
   try {
     const quizzesToSave: any[] = [];
@@ -253,55 +245,48 @@ const saveCourse = async (courseData: Course, isEditing: boolean) => {
     const cleanMaterials = (courseData.materials || []).filter((mat: any) => {
       if (typeof mat === 'object' && mat.type === 'quiz') {
         if (mat.data) {
-           quizzesToSave.push({
-               ...mat.data,
-               uuid: mat.uuid || mat.data.uuid
-           });
+           quizzesToSave.push({ ...mat.data, uuid: mat.uuid || mat.data.uuid });
         }
         return false; 
       }
       if (!mat.uuid) {
          materialsToSave.push(mat);
-         return false; // Neposílat v JSONu kurzu, server by to stejně ignoroval
+         return false;
       }
       return true;
     });
-    const payloadCourse = {
-      ...courseData,
-      materials: cleanMaterials
-    };
-    const url = isEditing && courseData.uuid 
-      ? `${apiUrl}/courses/${courseData.uuid}` 
-      : `${apiUrl}/courses`;
+    
+    const payloadCourse = { ...courseData, materials: cleanMaterials };
+    const url = isEditing && courseData.uuid ? `${apiUrl}/courses/${courseData.uuid}` : `${apiUrl}/courses`;
     const method = isEditing && courseData.uuid ? "PUT" : "POST";
-    console.log(`[Dashboard] Odesílám kurz na: ${url} (${method})`); 
+    
     const response = await fetch(url, {
       method: method,
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(payloadCourse),
     });
+    
     if (!response.ok) {
         const errorText = await response.text();
         throw new Error(`Chyba ${response.status}: ${errorText || response.statusText}`);
     }
+    
     const savedCourse = await response.json();
     const finalCourseId = isEditing && courseData.uuid ? courseData.uuid : savedCourse.uuid;
-    if (!finalCourseId) {
-       console.warn("Nepodařilo se získat ID kurzu, materiály nebudou uloženy.");
-    } else {
+    
+    if (finalCourseId) {
        if (materialsToSave.length > 0) {
-           console.log(`[Dashboard] Zpracovávám ${materialsToSave.length} nových materiálů...`);
            for (const mat of materialsToSave) {
                await saveMaterialSeparately(finalCourseId, mat);
            }
        }
        if (quizzesToSave.length > 0) {
-           console.log(`[Dashboard] Zpracovávám ${quizzesToSave.length} kvízů...`);
            for (const quiz of quizzesToSave) {
               await saveQuizSeparately(finalCourseId, quiz);
            }
        }
     }
+    
     showModal.value = false;
     await new Promise(resolve => setTimeout(resolve, 100));
     editingCourse.value = null;
@@ -312,9 +297,9 @@ const saveCourse = async (courseData: Course, isEditing: boolean) => {
   } catch (err: any) {
     const msg = err?.response?.data?.error || err.message || "Neznámá chyba";
     showError(`Chyba při ukládání: ${msg}`);
-    console.error("Error saving course sequence:", err);
   }
 };
+
 const saveQuizSeparately = async (courseId: string, quizData: any) => {
     try {
         const backendQuestions = quizData.questions.map((q: any, i: number) => {
@@ -340,10 +325,7 @@ const saveQuizSeparately = async (courseId: string, quizData: any) => {
               correctIndices
             };
         });
-        const payload = {
-            title: quizData.title,
-            questions: backendQuestions
-        };
+        const payload = { title: quizData.title, questions: backendQuestions };
         let quizUrl, method;
         if (quizData.uuid) {
             quizUrl = `${apiUrl}/courses/${courseId}/quizzes/${quizData.uuid}`;
@@ -352,7 +334,6 @@ const saveQuizSeparately = async (courseId: string, quizData: any) => {
             quizUrl = `${apiUrl}/courses/${courseId}/quizzes`;
             method = 'POST';
         }
-        console.log(`[Dashboard] Odesílám kvíz:`, payload);
         const res = await fetch(quizUrl, {
             method: method,
             headers: { 'Content-Type': 'application/json' },
@@ -363,15 +344,16 @@ const saveQuizSeparately = async (courseId: string, quizData: any) => {
            throw new Error(`Selhalo uložení kvízu: ${txt}`);
         }
     } catch (e: any) {
-        console.error(`Chyba při ukládání kvízu '${quizData.title}':`, e);
         throw e; 
     }
 };
+
 const deleteCourse = async (uuid?: string) => {
   if (!uuid) return;
   courseToDeleteId.value = uuid;
   showDeleteModal.value = true;
 };
+
 const confirmDelete = async () => {
   if (courseToDeleteId.value) {
     try {
@@ -382,16 +364,17 @@ const confirmDelete = async () => {
       await fetchCourses(); 
     } catch (err) {
       showError(err instanceof Error ? err.message : "Chyba při mazání kurzu");
-      console.error("Error deleting course:", err);
     }
   }
   showDeleteModal.value = false;
   courseToDeleteId.value = null;
 };
+
 onMounted(() => {
   fetchCourses();
 });
 </script>
+
 <style scoped>
 .line-clamp-2 {
   display: -webkit-box;

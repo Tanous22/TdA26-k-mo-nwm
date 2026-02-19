@@ -63,8 +63,8 @@ interface Course {
   description: string
   difficulty?: string
   category?: string
-  materials: any[] // ZMĚNA: Odstraněn otazník (povinné pole)
-  quizzes: any[]   // ZMĚNA: Odstraněn otazník (povinné pole)
+  materials: any[]
+  quizzes: any[]
 }
 const router = useRouter()
 const { API_URL } = useApi()
@@ -99,7 +99,8 @@ const fetchCourses = async () => {
       category: course.category || categories[1 + (index % 4)],
       materials: course.materials || [],
       quizzes: course.quizzes || [],
-      publishedAt: course.publishedAt // added publishedAt
+      publishedAt: course.publishedAt,
+      isPaused: Boolean(course.isPaused) // ZDE JE PŘIDANÝ NOVÝ STAV
     }))
   } catch (err) {
     showError(
