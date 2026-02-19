@@ -125,7 +125,8 @@ interface Course {
   color?: string;
   materials?: any[];
   publishedAt?: string | null;
-  isPaused?: boolean; // PŘIDÁNO
+  endsAt?: string | null; // ZDE PŘIDÁNO ENDS_AT
+  isPaused?: boolean;
 }
 
 const apiUrl = import.meta.env.VITE_API_URL || '/api';
@@ -168,7 +169,8 @@ const fetchCourses = async () => {
       color: ["#91F5AD", "#0070BB", "#FF6B6B", "#FFD93D"][index % 4],
       category: course.category || "Programování",
       publishedAt: course.publishedAt,
-      isPaused: Boolean(course.isPaused) // PŘIDÁNO
+      endsAt: course.endsAt, // ZDE PŘIDÁNO ENDS_AT
+      isPaused: Boolean(course.isPaused)
     }));
   } catch (err) {
     error.value = err instanceof Error ? err.message : "Nepodařilo se načíst kurzy";
@@ -184,9 +186,6 @@ const toggleCourseStatus = async (course: Course) => {
   const actionName = course.isPaused ? "Spuštění" : "Pozastavení";
 
   try {
-    console.log(`[Dashboard] ${actionName} kurzu: ${course.name}`);
-    
-    // ZDE JE OPRAVA: Voláme náš nový /control endpoint
     const response = await fetch(`${apiUrl}/courses/${course.uuid}/control`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -202,14 +201,12 @@ const toggleCourseStatus = async (course: Course) => {
     showSuccess(`Kurz ${course.isPaused ? "spuštěn" : "pozastaven"}`);
 
   } catch (err: any) {
-    console.error(`Error toggling course status:`, err);
     showError(`Nepodařilo se změnit stav kurzu: ${err.message}`);
   }
 };
 
 const openModal = (course?: Course) => {
   editingCourse.value = course ? JSON.parse(JSON.stringify(course)) : null;
-  console.log("[Dashboard] openModal called, course=", course?.name);
   showModal.value = true;
 };
 

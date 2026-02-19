@@ -60,20 +60,33 @@
               placeholder="O čem kurz bude..."
             ></textarea>
           </div>
+          
           <div class="bg-blue-50 p-6 rounded-lg border-2 border-blue-200">
             <h3 class="font-bold text-[#0070BB] flex items-center gap-2 mb-4">
-              ⏰ Naplánování zveřejnění
+              ⏰ Časování kurzu
             </h3>
-            <div>
-              <label class="block font-bold mb-1 text-sm">Zveřejnit kurz od</label>
-              <input
-                v-model="formData.publishedAt"
-                type="datetime-local"
-                class="organic-input w-full"
-              />
-              <p class="text-xs text-gray-500 mt-1">Kurz bude viditelný pro studenty od tohoto času</p>
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label class="block font-bold mb-1 text-sm">Zveřejnit kurz od</label>
+                <input
+                  v-model="formData.publishedAt"
+                  type="datetime-local"
+                  class="organic-input w-full"
+                />
+                <p class="text-xs text-gray-500 mt-1">Odkdy bude viditelný pro studenty</p>
+              </div>
+              <div>
+                <label class="block font-bold mb-1 text-sm">Ukončit kurz v</label>
+                <input
+                  v-model="formData.endsAt"
+                  type="datetime-local"
+                  class="organic-input w-full"
+                />
+                <p class="text-xs text-gray-500 mt-1">Kdy se kurz přesune do archivu</p>
+              </div>
             </div>
           </div>
+
           <div class="border-t-2 border-dashed border-gray-200 pt-4 mt-4">
             <label
               class="block font-bold mb-4 text-xl text-[#0257A5] text-center"
@@ -178,6 +191,7 @@
     </div>
   </Teleport>
 </template>
+
 <script setup lang="ts">
 import { ref, watch, nextTick } from "vue";
 import QuizModal from "./QuizModal.vue";
@@ -200,6 +214,7 @@ interface Course {
   category?: string;
   difficulty?: string;
   publishedAt?: string | null;
+  endsAt?: string | null; // PŘIDÁNO ENDS_AT
   materials?: Material[];
   quizzes?: any[];
 }
@@ -234,10 +249,10 @@ const defaultFormState = (): Course => ({
   category: "Programování",
   difficulty: "Jednoduchý",
   publishedAt: null,
+  endsAt: null, // PŘIDÁNO
   materials: [],
 });
 
-// ZDE PŘIDÁNA FUNKCE PRO ZOBRAZENÍ LOKÁLNÍHO ČASU V HTML INPUTU
 const formatDateTimeForInput = (dateStr?: string | null) => {
   if (!dateStr) return "";
   const d = new Date(dateStr);
@@ -250,7 +265,6 @@ const formData = ref<Course>(defaultFormState());
 
 const initForm = async () => {
   try {
-      console.log("[CourseModal] initForm start, props.course=", props.course?.name);
       isFormReady.value = false;
       await nextTick(); 
       if (props.course) {
@@ -258,7 +272,7 @@ const initForm = async () => {
           const safeCourse = JSON.parse(JSON.stringify(props.course));
           const sanitizedMaterials = Array.isArray(safeCourse.materials) 
               ? safeCourse.materials
-                  .filter((m: any) => m) // Odstraníme null
+                  .filter((m: any) => m)
                   .map((m: any) => {
                       if (!m.value) {
                           if (m.type === 'url') {
@@ -295,7 +309,8 @@ const initForm = async () => {
             description: safeCourse.description || "",
             category: safeCourse.category || "Programování",
             difficulty: safeCourse.difficulty || "Začátečník",
-            publishedAt: formatDateTimeForInput(safeCourse.publishedAt), // PŘEVOD PRO HTML INPUT
+            publishedAt: formatDateTimeForInput(safeCourse.publishedAt),
+            endsAt: formatDateTimeForInput(safeCourse.endsAt), // PŘIDÁNO MAPOVÁNÍ
             materials: mergedMaterials
           };
       } else {
@@ -308,12 +323,10 @@ const initForm = async () => {
       materialType.value = "url";
   } catch (error) {
       console.error("[CourseModal] CRITICAL ERROR IN initForm:", error);
-      console.error("[CourseModal] props.course at time of error:", props.course);
       formData.value = defaultFormState();
   } finally {
       await nextTick();
       isFormReady.value = true;
-      console.log("[CourseModal] initForm done, isFormReady=true, formData.name=", formData.value.name);
   }
 };
 
@@ -397,7 +410,6 @@ const removeMaterial = async (index: number) => {
               method: 'DELETE'
           });
           if (!response.ok) throw new Error("Chyba při mazání na serveru.");
-          console.log("[CourseModal] Materiál byl smazán.");
       } catch (e) {
           console.error("[CourseModal] Nepodařilo se smazat materiál ze serveru:", e);
           return; 
@@ -413,7 +425,6 @@ const confirmQuizDelete = async () => {
   if (material.uuid && isEditing.value && formData.value.uuid) {
     try {
       await fetch(`${apiUrl}/courses/${formData.value.uuid}/quizzes/${material.uuid}`, { method: 'DELETE' });
-      console.log("[CourseModal] Kvíz smazán!");
     } catch (err) {
       console.error("[CourseModal] Chyba mazání kvízu:", err);
       return; 

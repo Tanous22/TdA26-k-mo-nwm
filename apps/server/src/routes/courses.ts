@@ -18,9 +18,21 @@ const parseJson = (data: any) => {
     return data;
 };
 
+// ZDE JE OPRAVA PRO DATUM - Převod do MySQL formátu
 const formatForMySQL = (dateString: string | null) => {
     if (!dateString) return null;
-    return new Date(dateString).toISOString().slice(0, 19).replace('T', ' ');
+    const d = new Date(dateString);
+    if (isNaN(d.getTime())) return null;
+    
+    // Extrahujeme přesný lokální čas bez posunu do UTC
+    const year = d.getFullYear();
+    const month = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    const hours = String(d.getHours()).padStart(2, '0');
+    const minutes = String(d.getMinutes()).padStart(2, '0');
+    const seconds = String(d.getSeconds()).padStart(2, '0');
+    
+    return `${year}-${month}-${day} ${hours}:${minutes}:${seconds}`;
 };
 
 interface Course {
@@ -36,6 +48,7 @@ interface Course {
 }
 
 const getFullCourseData = async (courseId: string) => {
+    // FILTRACE SMAZANÝCH KURZŮ
     const [rows] = await pool.execute("SELECT * FROM courses WHERE uuid = ? AND deleted_at IS NULL", [courseId]);
     const courseData = (rows as any[])[0];
     if (!courseData) return null;
@@ -100,7 +113,7 @@ const getFullCourseData = async (courseId: string) => {
         difficulty: courseData.difficulty || "",
         category: courseData.category || "Programování",
         publishedAt: courseData.published_at,
-        isPaused: Boolean(courseData.is_paused),
+        isPaused: Boolean(courseData.is_paused), // POSÍLÁME IS_PAUSED
         materials,
         quizzes,
         feed
@@ -109,6 +122,7 @@ const getFullCourseData = async (courseId: string) => {
 
 coursesRouter.get("/", async (req: Request, res: Response) => {
     try {
+        // FILTRACE SMAZANÝCH KURZŮ
         const [rows] = await pool.execute("SELECT * FROM courses WHERE deleted_at IS NULL ORDER BY created_at DESC");
         const courses = [];
 
@@ -152,7 +166,7 @@ coursesRouter.get("/", async (req: Request, res: Response) => {
                 difficulty: row.difficulty || "",
                 category: row.category || "Programování",
                 publishedAt: row.published_at,
-                isPaused: Boolean(row.is_paused),
+                isPaused: Boolean(row.is_paused), // POSÍLÁME IS_PAUSED
                 materials,
                 quizzes,
                 feed: []
@@ -173,6 +187,7 @@ coursesRouter.post("/", async (req: Request, res: Response) => {
     const uuid = uuidv4();
     const { name, description = "", difficulty = "", category = "Programování", publishedAt = null } = req.body;
     
+    // PŘEVOD DATA
     const mysqlPublishedAt = formatForMySQL(publishedAt);
 
     try {
@@ -208,6 +223,27 @@ coursesRouter.post("/", async (req: Request, res: Response) => {
     }
 });
 
+// ENDPOINT PRO ARCHIV KURZŮ
+coursesRouter.get("/archived/all", async (req: Request, res: Response) => {
+    try {
+        // Vybere pouze kurzy, které MAJÍ vyplněné deleted_at (jsou smazané)
+        const [rows] = await pool.execute("SELECT * FROM courses WHERE deleted_at IS NOT NULL ORDER BY deleted_at DESC");
+        const archivedCourses = (rows as any[]).map(row => ({
+            uuid: row.uuid,
+            name: row.name,
+            description: row.description,
+            difficulty: row.difficulty || "",
+            category: row.category || "Programování",
+            deletedAt: row.deleted_at
+        }));
+        
+        res.status(200).json(archivedCourses);
+    } catch (error) {
+        console.error("Error fetching archived courses:", error);
+        res.status(500).json({ error: "Database error" });
+    }
+});
+
 coursesRouter.get("/:courseId", async (req: Request, res: Response) => {
     const { courseId } = req.params;
     try {
@@ -227,9 +263,11 @@ coursesRouter.put("/:courseId", async (req: Request, res: Response) => {
     const { courseId } = req.params;
     const { name, description, difficulty, category, publishedAt } = req.body;
     
+    // PŘEVOD DATA
     const mysqlPublishedAt = formatForMySQL(publishedAt);
 
     try {
+        // FILTRACE SMAZANÝCH KURZŮ
         const [result] = await pool.execute(
             "UPDATE courses SET name = ?, description = ?, difficulty = ?, category = ?, published_at = ? WHERE uuid = ? AND deleted_at IS NULL",
             [name, description, difficulty || "", category || "Programování", mysqlPublishedAt, courseId]
@@ -274,6 +312,7 @@ coursesRouter.put("/:courseId", async (req: Request, res: Response) => {
 coursesRouter.delete("/:courseId", async (req: Request, res: Response) => {
     const { courseId } = req.params;
     try {
+        // SOFT DELETE MÍSTO SKUTEČNÉHO MAZÁNÍ
         const [result] = await pool.execute("UPDATE courses SET deleted_at = NOW() WHERE uuid = ?", [courseId]);
         
         if ((result as any).affectedRows === 0) {
@@ -288,6 +327,7 @@ coursesRouter.delete("/:courseId", async (req: Request, res: Response) => {
     }
 });
 
+// ZDE JE ENDPOINT PRO POZASTAVENÍ KURZŮ
 coursesRouter.post("/:courseId/control", async (req: Request, res: Response) => {
     const { courseId } = req.params;
     const { action } = req.body;
