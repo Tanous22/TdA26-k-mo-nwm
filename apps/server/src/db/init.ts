@@ -33,15 +33,14 @@ export async function initDatabase() {
     `);
 
     await pool.execute(`
-      CREATE TABLE IF NOT EXISTS materials (
+      CREATE TABLE IF NOT EXISTS modules (
         id INT AUTO_INCREMENT PRIMARY KEY,
         uuid VARCHAR(36) NOT NULL UNIQUE,
         course_id INT NOT NULL,
-        type VARCHAR(50) NOT NULL,
-        name VARCHAR(255) NOT NULL,
+        title VARCHAR(255) NOT NULL,
         description TEXT,
-        content TEXT NOT NULL,
-        mime_type VARCHAR(100),
+        is_published BOOLEAN DEFAULT FALSE,
+        order_index INT DEFAULT 0,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
         FOREIGN KEY (course_id) REFERENCES courses(id) ON DELETE CASCADE
@@ -49,10 +48,26 @@ export async function initDatabase() {
     `);
 
     await pool.execute(`
+      CREATE TABLE IF NOT EXISTS materials (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        uuid VARCHAR(36) NOT NULL UNIQUE,
+        module_id INT NOT NULL,
+        type VARCHAR(50) NOT NULL,
+        name VARCHAR(255) NOT NULL,
+        description TEXT,
+        content TEXT NOT NULL,
+        mime_type VARCHAR(100),
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+        FOREIGN KEY (module_id) REFERENCES modules(id) ON DELETE CASCADE
+      )
+    `);
+
+    await pool.execute(`
       CREATE TABLE IF NOT EXISTS quizzes (
         id INT AUTO_INCREMENT PRIMARY KEY,
         uuid VARCHAR(36) NOT NULL UNIQUE,
-        course_id INT NOT NULL,
+        module_id INT NOT NULL,
         title VARCHAR(255) NOT NULL,
         scheduled_at DATETIME NULL,
         scheduled_end_at DATETIME NULL,
@@ -63,7 +78,7 @@ export async function initDatabase() {
         deleted_at DATETIME NULL,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-        FOREIGN KEY (course_id) REFERENCES courses(id) ON DELETE CASCADE
+        FOREIGN KEY (module_id) REFERENCES modules(id) ON DELETE CASCADE
       )
     `);
 

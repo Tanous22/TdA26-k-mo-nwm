@@ -41,27 +41,27 @@ const handleUpload = (req: Request, res: Response, next: NextFunction) => {
     });
 };
 
-// GET - Načtení materiálů
-materialsRouter.get("/", async (req: Request, res: Response) => {
+// GET - Načtení materiálů pro konkrétní modul
+materialsRouter.get("/module/:moduleId", async (req: Request, res: Response) => {
     try {
-        const { courseId } = req.params;
-        const [courses] = await pool.execute(
-            "SELECT id FROM courses WHERE uuid = ? OR id = ?",
-            [courseId, courseId]
+        const { moduleId } = req.params;
+        const [modules] = await pool.execute(
+            "SELECT id FROM modules WHERE uuid = ? OR id = ?",
+            [moduleId, moduleId]
         );
 
-        if ((courses as any).length === 0) {
-            res.status(404).json({ error: "Kurz nenalezen" });
+        if ((modules as any).length === 0) {
+            res.status(404).json({ error: "Modul nenalezen" });
             return;
         }
 
-        const dbCourseId = (courses as any)[0].id;
+        const dbModuleId = (modules as any)[0].id;
         const [rows] = await pool.execute(
             `SELECT uuid, type, name, description, content, mime_type, created_at 
              FROM materials 
-             WHERE course_id = ? 
+             WHERE module_id = ? 
              ORDER BY created_at DESC`,
-            [dbCourseId]
+            [dbModuleId]
         );
 
         const materials = (rows as any).map((m: any) => ({
@@ -71,7 +71,6 @@ materialsRouter.get("/", async (req: Request, res: Response) => {
             description: m.description,
             mimeType: m.mime_type,
             url: m.type === 'url' ? m.content : undefined,
-            // ZDE JE ZMĚNA: Přidáno /api
             fileUrl: m.type === 'file' ? `/api/uploads/${m.content}` : undefined
         }));
 
@@ -86,26 +85,27 @@ materialsRouter.get("/", async (req: Request, res: Response) => {
 materialsRouter.post("/", handleUpload, async (req: Request, res: Response) => {
     try {
         const { courseId } = req.params;
-        const { type, name, description, url } = req.body;
+        const { moduleId, type, name, description, url } = req.body;
         const safeDescription = description || null;
         const file = req.file;
 
-        if (!type || !name) {
-             res.status(400).json({ error: "Chybí povinná pole" });
+        if (!type || !name || !moduleId) {
+             res.status(400).json({ error: "Chybí povinná pole (type, name, moduleId)" });
              return;
         }
 
-        const [courses] = await pool.execute(
-            "SELECT id FROM courses WHERE uuid = ? OR id = ?",
-            [courseId, courseId]
+        const [modules] = await pool.execute(
+            "SELECT id, course_id FROM modules WHERE uuid = ? OR id = ?",
+            [moduleId, moduleId]
         );
 
-        if ((courses as any).length === 0) {
-             res.status(404).json({ error: "Kurz nenalezen" });
+        if ((modules as any).length === 0) {
+             res.status(404).json({ error: "Modul nenalezen" });
              return;
         }
 
-        const dbCourseId = (courses as any)[0].id;
+        const dbModuleId = (modules as any)[0].id;
+        const dbCourseId = (modules as any)[0].course_id;
         const newUuid = uuidv4();
         
         let content = "";
@@ -123,9 +123,9 @@ materialsRouter.post("/", handleUpload, async (req: Request, res: Response) => {
         }
 
         await pool.execute(
-            `INSERT INTO materials (uuid, course_id, type, name, description, content, mime_type) 
+            `INSERT INTO materials (uuid, module_id, type, name, description, content, mime_type) 
              VALUES (?, ?, ?, ?, ?, ?, ?)`,
-            [newUuid, dbCourseId, type, name, safeDescription, content, mimeType]
+            [newUuid, dbModuleId, type, name, safeDescription, content, mimeType]
         );
 
         try {
@@ -154,7 +154,6 @@ materialsRouter.post("/", handleUpload, async (req: Request, res: Response) => {
             description,
             mimeType,
             url: type === 'url' ? content : undefined,
-            // ZDE JE ZMĚNA: Přidáno /api
             fileUrl: type === 'file' ? `/api/uploads/${content}` : undefined
         });
 
@@ -172,7 +171,7 @@ materialsRouter.put("/:materialId", handleUpload, async (req: Request, res: Resp
         const file = req.file;
 
         const [materials] = await pool.execute(
-            "SELECT * FROM materials WHERE uuid = ?",
+            "SELECT m.*, mo.course_id FROM materials m JOIN modules mo ON m.module_id = mo.id WHERE m.uuid = ?",
             [materialId]
         );
 
@@ -206,26 +205,18 @@ materialsRouter.put("/:materialId", handleUpload, async (req: Request, res: Resp
             const feedUuid = uuidv4();
             const feedContent = `Materiál aktualizován: ${finalName}`;
             
-            const [courseData] = await pool.execute(
-                "SELECT id FROM courses WHERE uuid = ?",
-                [courseId]
+            await pool.execute(
+                "INSERT INTO feed_events (uuid, course_id, type, content, author, created_at, updated_at) VALUES (?, ?, ?, ?, ?, NOW(), NOW())",
+                [feedUuid, currentMaterial.course_id, "system", feedContent, null]
             );
-            const courseIntId = ((courseData as any)?.[0])?.id;
-
-            if (courseIntId) {
-                await pool.execute(
-                    "INSERT INTO feed_events (uuid, course_id, type, content, author, created_at, updated_at) VALUES (?, ?, ?, ?, ?, NOW(), NOW())",
-                    [feedUuid, courseIntId, "system", feedContent, null]
-                );
-                
-                broadcastToCourse(courseId, {
-                    uuid: feedUuid,
-                    type: "system",
-                    message: feedContent,
-                    createdAt: new Date(),
-                    isEdited: false
-                });
-            }
+            
+            broadcastToCourse(courseId, {
+                uuid: feedUuid,
+                type: "system",
+                message: feedContent,
+                createdAt: new Date(),
+                isEdited: false
+            });
         } catch (feedError) {
             console.error("[Route] Nepodařilo se zapsat do feedu:", feedError);
         }
@@ -237,7 +228,6 @@ materialsRouter.put("/:materialId", handleUpload, async (req: Request, res: Resp
             description: description || currentMaterial.description,
             mimeType: newMimeType,
             url: currentMaterial.type === 'url' ? newContent : undefined,
-            // ZDE JE ZMĚNA: Přidáno /api
             fileUrl: currentMaterial.type === 'file' ? `/api/uploads/${newContent}` : undefined
         });
 
@@ -247,13 +237,13 @@ materialsRouter.put("/:materialId", handleUpload, async (req: Request, res: Resp
     }
 });
 
-// DELETE zůstává stejný, tam se URL nevrací
+// DELETE
 materialsRouter.delete("/:materialId", async (req: Request, res: Response) => {
     try {
         const { materialId, courseId } = req.params;
 
         const [materials] = await pool.execute(
-            "SELECT name, course_id FROM materials WHERE uuid = ?",
+            "SELECT m.name, mo.course_id FROM materials m JOIN modules mo ON m.module_id = mo.id WHERE m.uuid = ?",
             [materialId]
         );
 
@@ -263,6 +253,7 @@ materialsRouter.delete("/:materialId", async (req: Request, res: Response) => {
         }
 
         const materialName = (materials as any)[0].name;
+        const dbCourseId = (materials as any)[0].course_id;
 
         const [result] = await pool.execute(
             "DELETE FROM materials WHERE uuid = ?",
@@ -278,26 +269,18 @@ materialsRouter.delete("/:materialId", async (req: Request, res: Response) => {
             const feedUuid = uuidv4();
             const feedContent = `Materiál smazán: ${materialName}`;
             
-            const [courseData] = await pool.execute(
-                "SELECT id FROM courses WHERE uuid = ?",
-                [courseId]
+            await pool.execute(
+                "INSERT INTO feed_events (uuid, course_id, type, content, author, created_at, updated_at) VALUES (?, ?, ?, ?, ?, NOW(), NOW())",
+                [feedUuid, dbCourseId, "system", feedContent, null]
             );
-            const courseIntId = ((courseData as any)?.[0])?.id;
-
-            if (courseIntId) {
-                await pool.execute(
-                    "INSERT INTO feed_events (uuid, course_id, type, content, author, created_at, updated_at) VALUES (?, ?, ?, ?, ?, NOW(), NOW())",
-                    [feedUuid, courseIntId, "system", feedContent, null]
-                );
-                
-                broadcastToCourse(courseId, {
-                    uuid: feedUuid,
-                    type: "system",
-                    message: feedContent,
-                    createdAt: new Date(),
-                    isEdited: false
-                });
-            }
+            
+            broadcastToCourse(courseId, {
+                uuid: feedUuid,
+                type: "system",
+                message: feedContent,
+                createdAt: new Date(),
+                isEdited: false
+            });
         } catch (feedError) {
             console.error("[Route] Nepodařilo se zapsat do feedu:", feedError);
         }

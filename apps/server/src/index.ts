@@ -1,6 +1,7 @@
 import "dotenv/config";
 import cors from "cors";
 import express from "express";
+import { modulesRouter } from "./routes/modules.js";
 import { initDatabase } from "./db/init.js";
 import { pool } from "./db/index.js"; // Přidán import pool
 import { userRoutes } from "./routes/users.js";
@@ -81,6 +82,7 @@ apiRoutes.get("/", (_req, res) => {
 app.use("/", apiRoutes);
 apiRoutes.use("/users", userRoutes);
 apiRoutes.use("/courses", coursesRouter);
+apiRoutes.use("/modules", modulesRouter);
 
 const port = process.env.PORT || 3000;
 

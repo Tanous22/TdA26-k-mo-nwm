@@ -23,47 +23,70 @@
       v-if="!loading && course"
       class="flex-1 max-w-7xl mx-auto w-full p-6 grid grid-cols-1 gap-8 -mt-8 relative z-20"
     >
-      <div class="space-y-8">
+      <div v-if="isTeacher" class="flex justify-end mb-2">
+        <button @click="handleAddModule" class="organic-btn px-6 py-3 !bg-[#0070BB] !text-white hover:!bg-[#005a96] shadow-md">
+          + Přidat nový modul
+        </button>
+      </div>
+
+      <div v-if="!course.modules || course.modules.length === 0" class="text-center py-12 text-gray-400 bg-white rounded-2xl shadow-sm">
+        Zatím zde nejsou žádné moduly.
+      </div>
+
+      <div v-for="module in course.modules" :key="module.uuid" class="mb-12 space-y-8">
+        
+        <div class="border-b-2 border-gray-200 pb-4 mb-6 flex justify-between items-end">
+          <div>
+            <h2 class="text-3xl font-bold text-gray-800">{{ module.title }}</h2>
+            <p v-if="module.description" class="text-gray-500 mt-1">{{ module.description }}</p>
+          </div>
+          <div class="flex items-center gap-3">
+            <span v-if="!module.is_published && isTeacher" class="text-xs bg-red-100 text-red-600 px-3 py-1 rounded-full font-bold">
+              Skryto před studenty
+            </span>
+            <button 
+              v-if="isTeacher" 
+              @click="toggleModuleVisibility(module)" 
+              class="text-sm px-4 py-2 rounded-lg font-semibold transition-colors"
+              :class="module.is_published ? 'bg-gray-200 text-gray-700 hover:bg-gray-300' : 'bg-[#91F5AD] text-[#1A1A1A] hover:bg-green-300'"
+            >
+              {{ module.is_published ? 'Skrýt modul' : 'Publikovat modul' }}
+            </button>
+          </div>
+        </div>
+
         <div class="bg-white rounded-2xl shadow-sm border border-gray-100 p-8">
           <div class="flex items-center justify-between mb-6">
-            <h2 class="text-2xl font-bold text-gray-800 flex items-center gap-2">📚 Studijní materiály</h2>
+            <h3 class="text-2xl font-bold text-gray-800 flex items-center gap-2">📚 Studijní materiály</h3>
             <div v-if="isTeacher" class="flex gap-2">
               <button
-                @click="handleAddLink"
+                @click="handleAddLink(module.uuid)"
                 class="organic-btn text-sm px-4 py-2 !bg-[#91F5AD] !text-[#1A1A1A] hover:!bg-[#0070BB] hover:!text-white"
               >
                 + Odkaz
               </button>
               <button
-                @click="triggerFileUpload"
+                @click="triggerFileUpload(module.uuid)"
                 :disabled="isUploading"
                 class="organic-btn text-sm px-4 py-2 !bg-[#0070BB] !text-white hover:!bg-[#005a96] disabled:opacity-50"
               >
                 {{ isUploading ? 'Nahrávám...' : '+ Soubor' }}
               </button>
-              <input
-                ref="fileInput"
-                type="file"
-                class="hidden"
-                @change="handleFileUpload"
-              />
             </div>
           </div>
           <div
-            v-if="!course.materials || course.materials.length === 0"
+            v-if="!module.materials || module.materials.length === 0"
             class="text-center py-12 text-gray-400"
           >
             Zatím nejsou k dispozici žádné materiály
           </div>
           <div v-else class="space-y-4">
             <div
-              v-for="mat in course.materials"
+              v-for="mat in module.materials"
               :key="mat.uuid"
               class="group flex items-center gap-4 p-4 rounded-xl border-2 border-transparent hover:border-[#91F5AD] hover:bg-green-50/30 transition-all cursor-pointer bg-gray-50"
             >
-              <div
-                class="w-12 h-12 flex items-center justify-center bg-white rounded-lg shadow-sm text-2xl"
-              >
+              <div class="w-12 h-12 flex items-center justify-center bg-white rounded-lg shadow-sm text-2xl">
                 {{ getMaterialIcon(mat) }}
               </div>
               <div class="flex-1 min-w-0">
@@ -91,26 +114,27 @@
             </div>
           </div>
         </div>
+
         <div class="bg-white rounded-2xl shadow-sm border border-gray-100 p-8">
           <div class="flex items-center justify-between mb-6">
-            <h2 class="text-2xl font-bold text-gray-800 flex items-center gap-2">✏️ Kvízy</h2>
+            <h3 class="text-2xl font-bold text-gray-800 flex items-center gap-2">✏️ Kvízy</h3>
             <button
               v-if="isTeacher"
-              @click="openQuizModal"
+              @click="openQuizModal(module.uuid)"
               class="organic-btn text-sm px-4 py-2 !bg-[#FFD93D] !text-[#1A1A1A] hover:!bg-[#E6C200]"
             >
               + Nový
             </button>
           </div>
           <div
-            v-if="!course.quizzes || course.quizzes.length === 0"
+            v-if="!module.quizzes || module.quizzes.length === 0"
             class="text-center py-12 text-gray-400"
           >
             Zatím žádné kvízy
           </div>
           <div v-else class="space-y-4">
             <div
-              v-for="quiz in course.quizzes"
+              v-for="quiz in module.quizzes"
               :key="quiz.uuid"
               class="bg-white rounded-xl border-2 border-gray-100 p-5 shadow-sm hover:shadow-md transition-all relative overflow-hidden"
             >
@@ -150,15 +174,22 @@
             </div>
           </div>
         </div>
+
       </div>
     </div>
+
+    <input
+      ref="fileInput"
+      type="file"
+      class="hidden"
+      @change="handleFileUpload"
+    />
+
     <div
       v-if="activeQuiz"
       class="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4"
     >
-      <div
-        class="bg-white rounded-2xl shadow-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto p-8 animate-slide-up"
-      >
+      <div class="bg-white rounded-2xl shadow-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto p-8 animate-slide-up">
         <QuizRunner
           :quiz="activeQuiz"
           :courseId="courseId"
@@ -167,6 +198,7 @@
         />
       </div>
     </div>
+    
     <QuizModal
       :show="showQuizModal"
       :edit-mode="!!editingQuiz"
@@ -174,6 +206,7 @@
       @close="closeQuizModal"
       @save="handleQuizSave"
     />
+    
     <ConfirmationModal
       :show="showDeleteModal"
       title="Opravdu chcete smazat tento kvíz?"
@@ -204,15 +237,17 @@ const { isTeacher } = useAuth()
 const { success, error: showError } = useNotifications()
 const courseId = (route.params.courseId || route.params.uuid) as string
 const API_URL = import.meta.env.VITE_API_URL || '/api'
+
 const loading = ref(true)
+const course = ref<Course | null>(null)
 const activeQuiz = ref<Quiz | null>(null)
 const showQuizModal = ref(false)
 const editingQuiz = ref<any>(null)
 const fileInput = ref<HTMLInputElement | null>(null)
-const course = ref<Course | null>(null)
 const showDeleteModal = ref(false)
 const quizIdToDelete = ref<string | null>(null)
 const isUploading = ref(false)
+const activeModuleId = ref<string | null>(null)
 
 const fetchCourse = async () => {
   try {
@@ -221,30 +256,72 @@ const fetchCourse = async () => {
     if (!response.ok) throw new Error('Failed to fetch course')
     const data = await response.json()
 
-    // OCHRANA PROTI PŘÍSTUPU STUDENTŮ K NEDOSTUPNÝM KURZŮM
     if (!isTeacher.value) {
       const isPaused = Boolean(data.isPaused);
       const isScheduled = data.publishedAt && new Date(data.publishedAt) > new Date();
-      
       if (isPaused || isScheduled) {
         showError('Tento kurz momentálně není přístupný.');
         router.push('/courses');
         return;
       }
+      // Vyfiltrování skrytých modulů pro studenty
+      data.modules = data.modules.filter((m: any) => m.is_published);
     }
-
     course.value = data
   } catch (err) {
-    showError(
-      err instanceof Error ? err.message : 'Nepodařilo se načíst kurz'
-    )
+    showError(err instanceof Error ? err.message : 'Nepodařilo se načíst kurz')
     course.value = null
   } finally {
     loading.value = false
   }
 }
 
-const handleAddLink = async () => {
+const handleAddModule = async () => {
+  const nextOrder = course.value?.modules ? course.value.modules.length + 1 : 1
+  const title = prompt('Zadejte název nového modulu:', `Modul ${nextOrder}`)
+  if (!title) return
+  const description = prompt('Zadejte krátký popis modulu (volitelné):', '')
+
+  try {
+    loading.value = true
+    const response = await fetch(`${API_URL}/modules`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        course_id: courseId,
+        title,
+        description,
+        order_index: nextOrder
+      }),
+    })
+    if (!response.ok) throw new Error('Nepodařilo se vytvořit modul')
+    success('Modul byl úspěšně vytvořen')
+    await fetchCourse()
+  } catch (err) {
+    showError(err instanceof Error ? err.message : 'Chyba při vytváření modulu')
+  } finally {
+    loading.value = false
+  }
+}
+
+const toggleModuleVisibility = async (module: any) => {
+  try {
+    const response = await fetch(`${API_URL}/modules/${module.uuid}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        is_published: !module.is_published
+      }),
+    })
+    if (!response.ok) throw new Error('Nepodařilo se upravit modul')
+    success(module.is_published ? 'Modul byl skryt' : 'Modul byl publikován')
+    await fetchCourse()
+  } catch (err) {
+    showError(err instanceof Error ? err.message : 'Chyba při úpravě modulu')
+  }
+}
+
+const handleAddLink = async (moduleId: string) => {
   const url = prompt('Zadejte URL odkazu:')
   if (!url) return
   const name = prompt('Zadejte název odkazu:', 'Nový odkaz')
@@ -255,6 +332,7 @@ const handleAddLink = async () => {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
+        moduleId,
         type: 'url',
         name,
         url,
@@ -265,26 +343,29 @@ const handleAddLink = async () => {
     success('Odkaz byl přidán')
     await fetchCourse()
   } catch (err) {
-    showError(
-      err instanceof Error ? err.message : 'Chyba při přidávání odkazu'
-    )
+    showError(err instanceof Error ? err.message : 'Chyba při přidávání odkazu')
   } finally {
     loading.value = false
   }
 }
 
-const triggerFileUpload = () => fileInput.value?.click()
+const triggerFileUpload = (moduleId: string) => {
+  activeModuleId.value = moduleId
+  fileInput.value?.click()
+}
 
 const handleFileUpload = async (event: Event) => {
   const file = (event.target as HTMLInputElement).files?.[0]
-  if (!file) return
+  if (!file || !activeModuleId.value) return
   try {
     isUploading.value = true
     const formData = new FormData()
+    formData.append('moduleId', activeModuleId.value)
     formData.append('file', file)
     formData.append('type', 'file')
     formData.append('name', file.name)
     formData.append('description', '')
+    
     const response = await fetch(`${API_URL}/courses/${courseId}/materials`, {
       method: 'POST',
       body: formData,
@@ -293,16 +374,16 @@ const handleFileUpload = async (event: Event) => {
     success('Soubor byl úspěšně nahrán')
     await fetchCourse()
   } catch (err) {
-    showError(
-      err instanceof Error ? err.message : 'Chyba při nahrávání souboru'
-    )
+    showError(err instanceof Error ? err.message : 'Chyba při nahrávání souboru')
   } finally {
     isUploading.value = false
+    activeModuleId.value = null
     if (fileInput.value) fileInput.value.value = ''
   }
 }
 
-const openQuizModal = () => {
+const openQuizModal = (moduleId: string) => {
+  activeModuleId.value = moduleId
   editingQuiz.value = null
   showQuizModal.value = true
 }
@@ -310,12 +391,11 @@ const openQuizModal = () => {
 const closeQuizModal = () => {
   showQuizModal.value = false
   editingQuiz.value = null
+  activeModuleId.value = null
 }
 
 const startQuiz = (quiz: any) => {
-  const formattedQuestions = (quiz.questions || []).map(
-    transformQuestionToFrontend
-  )
+  const formattedQuestions = (quiz.questions || []).map(transformQuestionToFrontend)
   activeQuiz.value = {
     ...quiz,
     questions: formattedQuestions,
@@ -324,14 +404,10 @@ const startQuiz = (quiz: any) => {
 
 const editQuiz = async (quiz: any) => {
   try {
-    const response = await fetch(
-      `${API_URL}/courses/${courseId}/quizzes/${quiz.uuid}`
-    )
+    const response = await fetch(`${API_URL}/courses/${courseId}/quizzes/${quiz.uuid}`)
     if (!response.ok) throw new Error(`HTTP ${response.status}`)
     const backendData = await response.json()
-    const formattedQuestions = (backendData.questions || []).map(
-      transformQuestionToFrontend
-    )
+    const formattedQuestions = (backendData.questions || []).map(transformQuestionToFrontend)
     editingQuiz.value = {
       ...backendData,
       questions: formattedQuestions,
@@ -339,9 +415,7 @@ const editQuiz = async (quiz: any) => {
     await nextTick()
     showQuizModal.value = true
   } catch (err) {
-    showError(
-      err instanceof Error ? err.message : 'Chyba při načítání kvízu'
-    )
+    showError(err instanceof Error ? err.message : 'Chyba při načítání kvízu')
   }
 }
 
@@ -353,17 +427,12 @@ const openDeleteModal = (quizUuid: string) => {
 const confirmDelete = async () => {
   if (!quizIdToDelete.value) return
   try {
-    const response = await fetch(
-      `${API_URL}/courses/${courseId}/quizzes/${quizIdToDelete.value}`,
-      { method: 'DELETE' }
-    )
+    const response = await fetch(`${API_URL}/courses/${courseId}/quizzes/${quizIdToDelete.value}`, { method: 'DELETE' })
     if (!response.ok) throw new Error(`HTTP ${response.status}`)
     success('Kvíz byl úspěšně smazán')
     await fetchCourse()
   } catch (err) {
-    showError(
-      err instanceof Error ? err.message : 'Chyba při mazání kvízu'
-    )
+    showError(err instanceof Error ? err.message : 'Chyba při mazání kvízu')
   } finally {
     showDeleteModal.value = false
     quizIdToDelete.value = null
@@ -374,6 +443,7 @@ const handleQuizSave = async (quizData: any) => {
   try {
     const backendQuestions = quizData.questions.map(transformQuestionToBackend)
     const payload = {
+      moduleId: activeModuleId.value,
       title: quizData.title,
       questions: backendQuestions,
       scheduledAt: quizData.scheduledAt || null,
@@ -385,6 +455,7 @@ const handleQuizSave = async (quizData: any) => {
       ? `${API_URL}/courses/${courseId}/quizzes/${editingQuiz.value.uuid}`
       : `${API_URL}/courses/${courseId}/quizzes`
     const method = editingQuiz.value ? 'PUT' : 'POST'
+    
     const response = await fetch(url, {
       method,
       headers: { 'Content-Type': 'application/json' },
@@ -395,9 +466,7 @@ const handleQuizSave = async (quizData: any) => {
     closeQuizModal()
     await fetchCourse()
   } catch (err) {
-    showError(
-      err instanceof Error ? err.message : 'Chyba při ukládání kvízu'
-    )
+    showError(err instanceof Error ? err.message : 'Chyba při ukládání kvízu')
   }
 }
 
@@ -405,6 +474,3 @@ onMounted(() => {
   fetchCourse()
 })
 </script>
-
-<style scoped>
-</style>

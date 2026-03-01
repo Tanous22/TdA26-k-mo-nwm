@@ -2,54 +2,57 @@ import { Router, type Request, type Response } from "express";
 import { v4 as uuidv4 } from "uuid";
 import { pool } from "../db/index.js";
 import { broadcastToCourse } from "./feed.js";
+
 export const quizzesRouter = Router({ mergeParams: true });
+
 const parseJson = (data: any) => {
     if (typeof data === 'string') {
         try { return JSON.parse(data); } catch (e) { return []; }
     }
     return data;
 };
-async function getCourseId(courseUuid: string): Promise<number | null> {
-    console.log(`[DEBUG-QUIZ] Resolving internal ID for course UUID: ${courseUuid}`);
-    const [rows] = await pool.execute("SELECT id FROM courses WHERE uuid = ?", [courseUuid]);
+
+// Pomocná funkce pro získání informací o modulu
+async function getModuleData(moduleUuid: string) {
+    console.log(`[DEBUG-QUIZ] Resolving internal ID for module UUID: ${moduleUuid}`);
+    const [rows] = await pool.execute(
+        "SELECT id, course_id FROM modules WHERE uuid = ? OR id = ?", 
+        [moduleUuid, moduleUuid]
+    );
     if ((rows as any[]).length === 0) {
-        console.warn(`[DEBUG-QUIZ] Course not found for UUID: ${courseUuid}`);
+        console.warn(`[DEBUG-QUIZ] Module not found for UUID: ${moduleUuid}`);
         return null;
     }
-    const id = (rows as any[])[0].id;
-    console.log(`[DEBUG-QUIZ] Found internal ID: ${id}`);
-    return id;
+    const data = (rows as any[])[0];
+    console.log(`[DEBUG-QUIZ] Found internal ID: ${data.id}, Course ID: ${data.course_id}`);
+    return data;
 }
-quizzesRouter.get("/", async (req: Request, res: Response) => {
-    const { courseId } = req.params;
-    console.log(`[DEBUG-QUIZ] GET / for course ${courseId}`);
+
+quizzesRouter.get("/module/:moduleId", async (req: Request, res: Response) => {
+    const { moduleId } = req.params;
+    console.log(`[DEBUG-QUIZ] GET / for module ${moduleId}`);
     try {
-        const dbCourseId = await getCourseId(courseId);
-        if (!dbCourseId) {
-            res.status(404).json({ error: "Course not found" });
+        const moduleData = await getModuleData(moduleId);
+        if (!moduleData) {
+            res.status(404).json({ error: "Modul nenalezen" });
             return;
         }
 
-        // Check if user is a teacher/lecturer (this assumes auth middleware adds user to request)
         const isTeacher = (req as any).user?.role === 'teacher' || (req as any).user?.role === 'admin';
-
         const [quizRows] = await pool.execute(`
             SELECT q.*, (SELECT COUNT(*) FROM quiz_attempts qa WHERE qa.quiz_id = q.id) as attemptsCount
             FROM quizzes q 
-            WHERE q.course_id = ? AND q.deleted_at IS NULL
+            WHERE q.module_id = ? AND q.deleted_at IS NULL
             ORDER BY q.created_at DESC
-        `, [dbCourseId]);
+        `, [moduleData.id]);
 
         const quizzes = [];
         const now = new Date();
 
         for (const qRow of (quizRows as any[])) {
-            // Filter out unpublished quizzes (unless user is teacher)
             if (!isTeacher && qRow.published_at && new Date(qRow.published_at) > now) {
                 continue;
             }
-
-            // Filter out scheduled quizzes in the future (unless user is teacher)
             if (qRow.scheduled_at && new Date(qRow.scheduled_at) > now && !isTeacher) {
                 continue;
             }
@@ -75,7 +78,6 @@ quizzesRouter.get("/", async (req: Request, res: Response) => {
                 }
             });
 
-            // Determine quiz status
             let status = 'ACTIVE';
             if (qRow.started_at && qRow.duration_minutes) {
                 const endTime = new Date(qRow.started_at);
@@ -106,78 +108,84 @@ quizzesRouter.get("/", async (req: Request, res: Response) => {
         res.status(500).json({ error: "Database error" });
     }
 });
+
 quizzesRouter.post("/", async (req: Request, res: Response) => {
     console.log("--- [DEBUG-QUIZ] POST / HIT ---");
-    const { courseId } = req.params;
-    const { title, questions, scheduledAt, scheduledEnd, durationMinutes, publishedAt } = req.body;
+    const { courseId } = req.params; 
+    const { moduleId, title, questions, scheduledAt, scheduledEnd, durationMinutes, publishedAt } = req.body;
     console.log("Params courseId:", courseId);
+    console.log("Body moduleId:", moduleId);
     console.log("Body title:", title);
     console.log("Body questions count:", questions?.length);
-    if (!title || !questions || !Array.isArray(questions)) {
-         console.error("[DEBUG-QUIZ] Validation failed: Missing title or questions is not array");
-         res.status(400).json({ error: "Missing title or questions" });
+
+    if (!title || !questions || !Array.isArray(questions) || !moduleId) {
+         console.error("[DEBUG-QUIZ] Validation failed: Missing title, questions is not array, or moduleId missing");
+         res.status(400).json({ error: "Chybí povinná pole (title, questions, moduleId)" });
          return;
     }
+
     try {
-        const dbCourseId = await getCourseId(courseId);
-        if (!dbCourseId) {
-            res.status(404).json({ error: "Course not found" });
+        const moduleData = await getModuleData(moduleId);
+        if (!moduleData) {
+            res.status(404).json({ error: "Modul nenalezen" });
             return;
         }
+
         const quizUuid = uuidv4();
         console.log(`[DEBUG-QUIZ] Creating quiz '${title}' with UUID ${quizUuid}`);
         const [quizResult] = await pool.execute(
-            "INSERT INTO quizzes (uuid, course_id, title, scheduled_at, scheduled_end_at, duration_minutes, published_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
-            [quizUuid, dbCourseId, title, scheduledAt || null, scheduledEnd || null, durationMinutes || null, publishedAt || null]
+            "INSERT INTO quizzes (uuid, module_id, title, scheduled_at, scheduled_end_at, duration_minutes, published_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
+            [quizUuid, moduleData.id, title, scheduledAt || null, scheduledEnd || null, durationMinutes || null, publishedAt || null]
         );
         const newQuizId = (quizResult as any).insertId;
         console.log(`[DEBUG-QUIZ] Quiz created, internal ID: ${newQuizId}`);
+
         const savedQuestions = [];
         for (const [index, q] of questions.entries()) {
             const qUuid = uuidv4();
             let correctAnswer: any = null;
             console.log(`[DEBUG-QUIZ] Processing question ${index + 1} (${q.type})`);
+            
             if (q.type === 'singleChoice') {
-                correctAnswer = q.correctIndex ?? 0; // Default 0
+                correctAnswer = q.correctIndex ?? 0;
             } else if (q.type === 'multipleChoice') {
-                correctAnswer = q.correctIndices || []; // Default []
+                correctAnswer = q.correctIndices || [];
             }
-            const safeQuestion = q.question || ""; // Default prázdný string
-            const safeOptions = JSON.stringify(q.options || []); // Default prázdné pole
+            
+            const safeQuestion = q.question || "";
+            const safeOptions = JSON.stringify(q.options || []);
             const safeCorrectAnswer = JSON.stringify(correctAnswer);
+            
             console.log(`[DEBUG-QUIZ] Inserting question: type=${q.type}, options=${safeOptions}, answer=${safeCorrectAnswer}`);
             await pool.execute(
                 `INSERT INTO quiz_questions (uuid, quiz_id, type, question, options, correct_answer) 
                  VALUES (?, ?, ?, ?, ?, ?)`,
-                [
-                    qUuid, 
-                    newQuizId, 
-                    q.type || 'singleChoice', // Pojistka typu
-                    safeQuestion, 
-                    safeOptions, 
-                    safeCorrectAnswer
-                ]
+                [qUuid, newQuizId, q.type || 'singleChoice', safeQuestion, safeOptions, safeCorrectAnswer]
             );
             savedQuestions.push({ ...q, uuid: qUuid });
         }
         console.log("[DEBUG-QUIZ] All questions inserted successfully.");
+
         try {
             const feedUuid = uuidv4();
             const feedContent = `Nový kvíz: ${title}`;
             await pool.execute(
                 "INSERT INTO feed_events (uuid, course_id, type, content, author, created_at) VALUES (?, ?, ?, ?, ?, NOW())",
-                [feedUuid, dbCourseId, "system", feedContent, null]
+                [feedUuid, moduleData.course_id, "system", feedContent, null]
             );
-            broadcastToCourse(courseId, {
-                uuid: feedUuid,
-                type: "system",
-                message: feedContent,
-                createdAt: new Date(),
-                isEdited: false
-            });
+            if (courseId) {
+                broadcastToCourse(courseId, {
+                    uuid: feedUuid,
+                    type: "system",
+                    message: feedContent,
+                    createdAt: new Date(),
+                    isEdited: false
+                });
+            }
         } catch (feedError) {
             console.error("[DEBUG-QUIZ] Nepodařilo se zapsat do feedu:", feedError);
         }
+
         res.status(201).json({
             uuid: quizUuid,
             title,
@@ -193,9 +201,9 @@ quizzesRouter.post("/", async (req: Request, res: Response) => {
         res.status(500).json({ error: "Database error" });
     }
 });
+
 quizzesRouter.get("/:quizId", async (req: Request, res: Response) => {
     const { quizId } = req.params;
-    const { courseId } = req.query;
     const user = (req as any).user;
     console.log(`[DEBUG-QUIZ] GET Detail for ${quizId}`);
     try {
@@ -210,12 +218,13 @@ quizzesRouter.get("/:quizId", async (req: Request, res: Response) => {
             res.status(404).json({ error: "Quiz not found" });
             return;
         }
-        // Check if student can access this quiz (published or they are teacher)
+
         if (user && !user.isTeacher && quizData.published_at && new Date(quizData.published_at) > new Date()) {
             console.warn(`[DEBUG-QUIZ] Student accessing unpublished quiz ${quizId}`);
             res.status(403).json({ error: "Quiz not yet published" });
             return;
         }
+
         const [questionRows] = await pool.execute(
             "SELECT * FROM quiz_questions WHERE quiz_id = ?",
             [quizData.id]
@@ -235,6 +244,7 @@ quizzesRouter.get("/:quizId", async (req: Request, res: Response) => {
                 return { ...base, correctIndices: correctAnswer };
             }
         });
+
         res.status(200).json({
             uuid: quizData.uuid,
             title: quizData.title,
@@ -252,12 +262,16 @@ quizzesRouter.get("/:quizId", async (req: Request, res: Response) => {
         res.status(500).json({ error: "Database error" });
     }
 });
+
 quizzesRouter.put("/:quizId", async (req: Request, res: Response) => {
     const { quizId, courseId } = req.params;
     const { title, questions, scheduledAt, scheduledEnd, durationMinutes, publishedAt } = req.body;
     console.log(`[DEBUG-QUIZ] PUT /${quizId} HIT - Smart Update`);
     try {
-        const [rows] = await pool.execute("SELECT id, course_id FROM quizzes WHERE uuid = ? AND deleted_at IS NULL", [quizId]);
+        const [rows] = await pool.execute(
+            "SELECT q.id, mo.course_id FROM quizzes q JOIN modules mo ON q.module_id = mo.id WHERE q.uuid = ? AND q.deleted_at IS NULL", 
+            [quizId]
+        );
         const quizData = (rows as any[])[0];
         if (!quizData) {
             res.status(404).json({ error: "Quiz not found" });
@@ -265,21 +279,26 @@ quizzesRouter.put("/:quizId", async (req: Request, res: Response) => {
         }
         const dbQuizId = quizData.id;
         const courseIntId = quizData.course_id;
+
         await pool.execute(
             "UPDATE quizzes SET title = ?, scheduled_at = ?, scheduled_end_at = ?, duration_minutes = ?, published_at = ? WHERE id = ?", 
             [title, scheduledAt || null, scheduledEnd || null, durationMinutes || null, publishedAt || null, dbQuizId]
         );
+
         const [existingRows] = await pool.execute("SELECT uuid FROM quiz_questions WHERE quiz_id = ?", [dbQuizId]);
         const existingUuids = (existingRows as any[]).map(r => r.uuid);
         const keptUuids: string[] = []; 
         const savedQuestions = [];
+
         for (const q of questions) {
             let correctAnswer: any = null;
             if (q.type === 'singleChoice') correctAnswer = q.correctIndex ?? 0;
             else if (q.type === 'multipleChoice') correctAnswer = q.correctIndices || [];
+            
             const safeQuestion = q.question || ""; 
             const optionsStr = JSON.stringify(q.options || []);
             const correctStr = JSON.stringify(correctAnswer);
+
             if (q.uuid && existingUuids.includes(q.uuid)) {
                 console.log(`[DEBUG-QUIZ] Updating question ${q.uuid}`);
                 await pool.execute(
@@ -301,6 +320,7 @@ quizzesRouter.put("/:quizId", async (req: Request, res: Response) => {
                 savedQuestions.push({ ...q, uuid: newUuid });
             }
         }
+
         const toDelete = existingUuids.filter(id => !keptUuids.includes(id));
         if (toDelete.length > 0) {
             console.log(`[DEBUG-QUIZ] Deleting ${toDelete.length} removed questions`);
@@ -310,8 +330,10 @@ quizzesRouter.put("/:quizId", async (req: Request, res: Response) => {
                 [...toDelete, dbQuizId]
             );
         }
+
         const [countRows] = await pool.execute("SELECT COUNT(*) as count FROM quiz_attempts WHERE quiz_id = ?", [dbQuizId]);
         const count = (countRows as any)[0].count;
+
         try {
             const feedUuid = uuidv4();
             const feedContent = `Kvíz aktualizován: ${title}`;
@@ -320,17 +342,20 @@ quizzesRouter.put("/:quizId", async (req: Request, res: Response) => {
                     "INSERT INTO feed_events (uuid, course_id, type, content, author, created_at, updated_at) VALUES (?, ?, ?, ?, ?, NOW(), NOW())",
                     [feedUuid, courseIntId, "system", feedContent, null]
                 );
-                broadcastToCourse(courseId, {
-                    uuid: feedUuid,
-                    type: "system",
-                    message: feedContent,
-                    createdAt: new Date(),
-                    isEdited: false
-                });
+                if (courseId) {
+                    broadcastToCourse(courseId, {
+                        uuid: feedUuid,
+                        type: "system",
+                        message: feedContent,
+                        createdAt: new Date(),
+                        isEdited: false
+                    });
+                }
             }
         } catch (feedError) {
             console.error("[DEBUG-QUIZ] Nepodařilo se zapsat aktualizaci do feedu:", feedError);
         }
+
         res.status(200).json({ 
             uuid: quizId, 
             title, 
@@ -345,10 +370,14 @@ quizzesRouter.put("/:quizId", async (req: Request, res: Response) => {
         res.status(500).json({ error: "Database error" });
     }
 });
+
 quizzesRouter.delete("/:quizId", async (req: Request, res: Response) => {
     const { quizId, courseId } = req.params;
     try {
-        const [quizRows] = await pool.execute("SELECT title, course_id FROM quizzes WHERE uuid = ? AND deleted_at IS NULL", [quizId]);
+        const [quizRows] = await pool.execute(
+            "SELECT q.title, mo.course_id FROM quizzes q JOIN modules mo ON q.module_id = mo.id WHERE q.uuid = ? AND q.deleted_at IS NULL", 
+            [quizId]
+        );
         if ((quizRows as any[]).length === 0) {
             res.status(404).json({ error: "Quiz not found" });
             return;
@@ -356,12 +385,12 @@ quizzesRouter.delete("/:quizId", async (req: Request, res: Response) => {
         const quizTitle = (quizRows as any[])[0].title;
         const quizCourseId = (quizRows as any[])[0].course_id;
         
-        // Soft delete: set deleted_at instead of actually deleting
         const [result] = await pool.execute("UPDATE quizzes SET deleted_at = NOW() WHERE uuid = ?", [quizId]);
         if ((result as any).affectedRows === 0) {
              res.status(404).json({ error: "Quiz not found" });
              return;
         }
+
         try {
             const feedUuid = uuidv4();
             const feedContent = `Kvíz smazán: ${quizTitle}`;
@@ -369,22 +398,26 @@ quizzesRouter.delete("/:quizId", async (req: Request, res: Response) => {
                 "INSERT INTO feed_events (uuid, course_id, type, content, author, created_at, updated_at) VALUES (?, ?, ?, ?, ?, NOW(), NOW())",
                 [feedUuid, quizCourseId, "system", feedContent, null]
             );
-            broadcastToCourse(courseId, {
-                uuid: feedUuid,
-                type: "system",
-                message: feedContent,
-                createdAt: new Date(),
-                isEdited: false
-            });
+            if (courseId) {
+                broadcastToCourse(courseId, {
+                    uuid: feedUuid,
+                    type: "system",
+                    message: feedContent,
+                    createdAt: new Date(),
+                    isEdited: false
+                });
+            }
         } catch (feedError) {
             console.error("[DEBUG-QUIZ] Nepodařilo se zapsat mazání do feedu:", feedError);
         }
+
         res.status(204).send();
     } catch (error) {
         console.error("Error deleting quiz:", error);
         res.status(500).json({ error: "Database error" });
     }
 });
+
 quizzesRouter.post("/:quizId/submit", async (req: Request, res: Response) => {
     const { quizId } = req.params;
     const { answers } = req.body;
@@ -403,6 +436,7 @@ quizzesRouter.post("/:quizId/submit", async (req: Request, res: Response) => {
         let score = 0;
         const maxScore = dbQuestions.length;
         const correctPerQuestion: boolean[] = [];
+
         for (const dbQ of dbQuestions) {
             const correctAnswer = parseJson(dbQ.correct_answer);
             const userAnswer = answers.find((a: any) => a.uuid === dbQ.uuid);
@@ -419,12 +453,14 @@ quizzesRouter.post("/:quizId/submit", async (req: Request, res: Response) => {
             if (isCorrect) score++;
             correctPerQuestion.push(isCorrect);
         }
+
         const attemptUuid = uuidv4();
         await pool.execute(
             `INSERT INTO quiz_attempts (uuid, quiz_id, score, max_score, answers) 
              VALUES (?, ?, ?, ?, ?)`,
             [attemptUuid, quizData.id, score, maxScore, JSON.stringify(answers)]
         );
+
         res.status(200).json({
             quizUuid: quizId,
             score,
@@ -448,7 +484,10 @@ quizzesRouter.post("/:quizId/control", async (req: Request, res: Response) => {
     }
 
     try {
-        const [rows] = await pool.execute("SELECT id, title, course_id FROM quizzes WHERE uuid = ? AND deleted_at IS NULL", [quizId]);
+        const [rows] = await pool.execute(
+            "SELECT q.id, q.title, mo.course_id FROM quizzes q JOIN modules mo ON q.module_id = mo.id WHERE q.uuid = ? AND q.deleted_at IS NULL", 
+            [quizId]
+        );
         const quizData = (rows as any[])[0];
         if (!quizData) {
             res.status(404).json({ error: "Quiz not found" });
@@ -477,7 +516,6 @@ quizzesRouter.post("/:quizId/control", async (req: Request, res: Response) => {
         const [updatedRows] = await pool.execute("SELECT * FROM quizzes WHERE id = ? AND deleted_at IS NULL", [dbQuizId]);
         const updatedQuiz = (updatedRows as any[])[0];
 
-        // Add system message to feed
         try {
             const feedUuid = uuidv4();
             let feedContent = '';
@@ -494,13 +532,15 @@ quizzesRouter.post("/:quizId/control", async (req: Request, res: Response) => {
                 [feedUuid, dbCourseId, "system", feedContent, null]
             );
             
-            broadcastToCourse(courseId, {
-                uuid: feedUuid,
-                type: "system",
-                message: feedContent,
-                createdAt: new Date(),
-                isEdited: false
-            });
+            if (courseId) {
+                broadcastToCourse(courseId, {
+                    uuid: feedUuid,
+                    type: "system",
+                    message: feedContent,
+                    createdAt: new Date(),
+                    isEdited: false
+                });
+            }
         } catch (feedError) {
             console.error("[DEBUG-QUIZ] Nepodařilo se zapsat kontrolu do feedu:", feedError);
         }

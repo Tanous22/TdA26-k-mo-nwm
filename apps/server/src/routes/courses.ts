@@ -36,60 +36,63 @@ const formatForMySQL = (dateString: string | null) => {
     return `${year}-${month}-${day} ${hours}:${minutes}:${seconds}`;
 };
 
-interface Course {
-    uuid: string;
-    name: string;
-    description: string;
-    difficulty: string;
-    category: string;
-    publishedAt?: string | null;
-    endsAt?: string | null;
-    materials: any[];
-    quizzes: any[];
-    feed: any[];
-}
-
 const getFullCourseData = async (courseId: string) => {
     const [rows] = await pool.execute("SELECT * FROM courses WHERE uuid = ? AND deleted_at IS NULL", [courseId]);
     const courseData = (rows as any[])[0];
     if (!courseData) return null;
 
-    const [materialRows] = await pool.execute(
-        `SELECT uuid, type, name, description, content, mime_type FROM materials WHERE course_id = ? ORDER BY created_at DESC`,
-        [courseData.id]
-    );
+    // Načtení modulů pro kurz
+    const [moduleRows] = await pool.execute("SELECT * FROM modules WHERE course_id = ? ORDER BY order_index ASC", [courseData.id]);
+    const modules = [];
 
-    const materials = (materialRows as any[])
-        .filter(m => m)
-        .map(m => ({
-            uuid: m.uuid,
-            type: m.type,
-            name: m.name,
-            description: m.description,
-            mimeType: m.mime_type,
-            url: m.type === 'url' ? m.content : undefined,
-            fileUrl: m.type === 'file' ? `/api/uploads/${m.content}` : undefined
-        }));
+    for (const modRow of (moduleRows as any[])) {
+        const [materialRows] = await pool.execute(
+            `SELECT uuid, type, name, description, content, mime_type FROM materials WHERE module_id = ? ORDER BY created_at DESC`,
+            [modRow.id]
+        );
 
-    const [quizRows] = await pool.execute(
-        `SELECT q.*, (SELECT COUNT(*) FROM quiz_attempts qa WHERE qa.quiz_id = q.id) as attemptsCount FROM quizzes q WHERE q.course_id = ? ORDER BY q.created_at DESC`,
-        [courseData.id]
-    );
+        const materials = (materialRows as any[])
+            .filter(m => m)
+            .map(m => ({
+                uuid: m.uuid,
+                type: m.type,
+                name: m.name,
+                description: m.description,
+                mimeType: m.mime_type,
+                url: m.type === 'url' ? m.content : undefined,
+                fileUrl: m.type === 'file' ? `/api/uploads/${m.content}` : undefined
+            }));
 
-    const quizzes = [];
-    for (const qRow of (quizRows as any[])) {
-        if (!qRow) continue;
-        const [questionRows] = await pool.execute("SELECT * FROM quiz_questions WHERE quiz_id = ?", [qRow.id]);
-        
-        const questions = (questionRows as any[]).map(q => {
-            if (!q) return null;
-            const options = parseJson(q.options) || [];
-            const correctAnswer = parseJson(q.correct_answer);
-            const base = { uuid: q.uuid, type: q.type, question: q.question, options };
-            return q.type === 'singleChoice' ? { ...base, correctIndex: correctAnswer } : { ...base, correctIndices: correctAnswer };
-        }).filter(q => q);
+        const [quizRows] = await pool.execute(
+            `SELECT q.*, (SELECT COUNT(*) FROM quiz_attempts qa WHERE qa.quiz_id = q.id) as attemptsCount FROM quizzes q WHERE q.module_id = ? ORDER BY q.created_at DESC`,
+            [modRow.id]
+        );
 
-        quizzes.push({ uuid: qRow.uuid, title: qRow.title, attemptsCount: qRow.attemptsCount || 0, questions });
+        const quizzes = [];
+        for (const qRow of (quizRows as any[])) {
+            if (!qRow) continue;
+            const [questionRows] = await pool.execute("SELECT * FROM quiz_questions WHERE quiz_id = ?", [qRow.id]);
+            
+            const questions = (questionRows as any[]).map(q => {
+                if (!q) return null;
+                const options = parseJson(q.options) || [];
+                const correctAnswer = parseJson(q.correct_answer);
+                const base = { uuid: q.uuid, type: q.type, question: q.question, options };
+                return q.type === 'singleChoice' ? { ...base, correctIndex: correctAnswer } : { ...base, correctIndices: correctAnswer };
+            }).filter(q => q);
+
+            quizzes.push({ uuid: qRow.uuid, title: qRow.title, attemptsCount: qRow.attemptsCount || 0, questions });
+        }
+
+        modules.push({
+            uuid: modRow.uuid,
+            title: modRow.title,
+            description: modRow.description,
+            is_published: Boolean(modRow.is_published),
+            order_index: modRow.order_index,
+            materials,
+            quizzes
+        });
     }
 
     const [feedRows] = await pool.execute(
@@ -116,8 +119,7 @@ const getFullCourseData = async (courseId: string) => {
         publishedAt: courseData.published_at,
         endsAt: courseData.ends_at, // ODESÍLÁNÍ ENDS_AT DO FRONTENDU
         isPaused: Boolean(courseData.is_paused),
-        materials,
-        quizzes,
+        modules,
         feed
     };
 };
@@ -159,36 +161,49 @@ coursesRouter.get("/", async (req: Request, res: Response) => {
         const courses = [];
 
         for (const row of (rows as any[])) {
-            const [materialRows] = await pool.execute(
-                `SELECT uuid, type, name, description, content, mime_type FROM materials WHERE course_id = ?`,
-                [row.id]
-            );
-            
-            const materials = (materialRows as any[]).map(m => ({
-                uuid: m.uuid,
-                type: m.type,
-                name: m.name,
-                description: m.description,
-                mimeType: m.mime_type,
-                url: m.type === 'url' ? m.content : undefined,
-                fileUrl: m.type === 'file' ? `/api/uploads/${m.content}` : undefined
-            }));
+            const [moduleRows] = await pool.execute("SELECT * FROM modules WHERE course_id = ? ORDER BY order_index ASC", [row.id]);
+            const modules = [];
 
-            const [quizRows] = await pool.execute(
-                `SELECT q.*, (SELECT COUNT(*) FROM quiz_attempts qa WHERE qa.quiz_id = q.id) as attemptsCount FROM quizzes q WHERE q.course_id = ?`,
-                [row.id]
-            );
+            for (const modRow of (moduleRows as any[])) {
+                const [materialRows] = await pool.execute(
+                    `SELECT uuid, type, name, description, content, mime_type FROM materials WHERE module_id = ?`,
+                    [modRow.id]
+                );
+                
+                const materials = (materialRows as any[]).map(m => ({
+                    uuid: m.uuid,
+                    type: m.type,
+                    name: m.name,
+                    description: m.description,
+                    mimeType: m.mime_type,
+                    url: m.type === 'url' ? m.content : undefined,
+                    fileUrl: m.type === 'file' ? `/api/uploads/${m.content}` : undefined
+                }));
 
-            const quizzes = [];
-            for (const qRow of (quizRows as any[])) {
-                const [questionRows] = await pool.execute("SELECT * FROM quiz_questions WHERE quiz_id = ?", [qRow.id]);
-                const questions = (questionRows as any[]).map(q => {
-                    const options = parseJson(q.options);
-                    const correctAnswer = parseJson(q.correct_answer);
-                    const base = { uuid: q.uuid, type: q.type, question: q.question, options };
-                    return q.type === 'singleChoice' ? { ...base, correctIndex: correctAnswer } : { ...base, correctIndices: correctAnswer };
+                const [quizRows] = await pool.execute(
+                    `SELECT q.*, (SELECT COUNT(*) FROM quiz_attempts qa WHERE qa.quiz_id = q.id) as attemptsCount FROM quizzes q WHERE q.module_id = ?`,
+                    [modRow.id]
+                );
+
+                const quizzes = [];
+                for (const qRow of (quizRows as any[])) {
+                    const [questionRows] = await pool.execute("SELECT * FROM quiz_questions WHERE quiz_id = ?", [qRow.id]);
+                    const questions = (questionRows as any[]).map(q => {
+                        const options = parseJson(q.options);
+                        const correctAnswer = parseJson(q.correct_answer);
+                        const base = { uuid: q.uuid, type: q.type, question: q.question, options };
+                        return q.type === 'singleChoice' ? { ...base, correctIndex: correctAnswer } : { ...base, correctIndices: correctAnswer };
+                    });
+                    quizzes.push({ uuid: qRow.uuid, title: qRow.title, attemptsCount: qRow.attemptsCount || 0, questions });
+                }
+
+                modules.push({
+                    uuid: modRow.uuid,
+                    title: modRow.title,
+                    is_published: Boolean(modRow.is_published),
+                    materials,
+                    quizzes
                 });
-                quizzes.push({ uuid: qRow.uuid, title: qRow.title, attemptsCount: qRow.attemptsCount || 0, questions });
             }
 
             courses.push({
@@ -200,8 +215,7 @@ coursesRouter.get("/", async (req: Request, res: Response) => {
                 publishedAt: row.published_at,
                 endsAt: row.ends_at, // ODESÍLÁNÍ ENDS_AT DO FRONTENDU
                 isPaused: Boolean(row.is_paused),
-                materials,
-                quizzes,
+                modules,
                 feed: []
             });
         }
@@ -232,6 +246,13 @@ coursesRouter.post("/", async (req: Request, res: Response) => {
         );
         const courseId = (result as any).insertId;
 
+        // Vytvoření prvního (výchozího) modulu pro nový kurz
+        const moduleUuid = uuidv4();
+        await pool.execute(
+            "INSERT INTO modules (uuid, course_id, title, description, order_index, is_published) VALUES (?, ?, ?, ?, ?, ?)",
+            [moduleUuid, courseId, "Modul 1", "Úvodní modul", 1, true]
+        );
+
         try {
             const feedUuid = uuidv4();
             const feedContent = `Nový kurz: ${name}`;
@@ -251,7 +272,17 @@ coursesRouter.post("/", async (req: Request, res: Response) => {
             console.error("[Courses] Nepodařilo se zapsat do feedu:", feedError);
         }
 
-        res.status(201).json({ uuid, name, description, difficulty, category, publishedAt: publishedAt || null, endsAt: endsAt || null, materials: [], quizzes: [], feed: [] });
+        res.status(201).json({ 
+            uuid, 
+            name, 
+            description, 
+            difficulty, 
+            category, 
+            publishedAt: publishedAt || null, 
+            endsAt: endsAt || null, 
+            modules: [{ uuid: moduleUuid, title: "Modul 1", materials: [], quizzes: [] }], 
+            feed: [] 
+        });
     } catch (error) {
         console.error("Error creating course:", error);
         res.status(500).json({ error: "Database error" });
