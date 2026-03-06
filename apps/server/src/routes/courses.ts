@@ -47,7 +47,7 @@ const getFullCourseData = async (courseId: string) => {
 
     for (const modRow of (moduleRows as any[])) {
         const [materialRows] = await pool.execute(
-            `SELECT uuid, type, name, description, content, mime_type FROM materials WHERE module_id = ? ORDER BY created_at DESC`,
+            `SELECT uuid, type, name, description, content, mime_type, view_count FROM materials WHERE module_id = ? ORDER BY created_at DESC`,
             [modRow.id]
         );
 
@@ -59,6 +59,7 @@ const getFullCourseData = async (courseId: string) => {
                 name: m.name,
                 description: m.description,
                 mimeType: m.mime_type,
+                viewCount: m.view_count || 0, // NOVÁ STATISTIKA PŘIDÁNA
                 url: m.type === 'url' ? m.content : undefined,
                 fileUrl: m.type === 'file' ? `/api/uploads/${m.content}` : undefined
             }));
@@ -88,6 +89,7 @@ const getFullCourseData = async (courseId: string) => {
             uuid: modRow.uuid,
             title: modRow.title,
             description: modRow.description,
+            content: modRow.content, // NOVÝ DLOUHÝ TEXT PŘIDÁN
             is_published: Boolean(modRow.is_published),
             order_index: modRow.order_index,
             materials,
@@ -166,7 +168,7 @@ coursesRouter.get("/", async (req: Request, res: Response) => {
 
             for (const modRow of (moduleRows as any[])) {
                 const [materialRows] = await pool.execute(
-                    `SELECT uuid, type, name, description, content, mime_type FROM materials WHERE module_id = ?`,
+                    `SELECT uuid, type, name, description, content, mime_type, view_count FROM materials WHERE module_id = ?`,
                     [modRow.id]
                 );
                 
@@ -176,6 +178,7 @@ coursesRouter.get("/", async (req: Request, res: Response) => {
                     name: m.name,
                     description: m.description,
                     mimeType: m.mime_type,
+                    viewCount: m.view_count || 0, // NOVÁ STATISTIKA
                     url: m.type === 'url' ? m.content : undefined,
                     fileUrl: m.type === 'file' ? `/api/uploads/${m.content}` : undefined
                 }));
@@ -200,6 +203,8 @@ coursesRouter.get("/", async (req: Request, res: Response) => {
                 modules.push({
                     uuid: modRow.uuid,
                     title: modRow.title,
+                    description: modRow.description,
+                    content: modRow.content, // NOVÝ TEXT PŘIDÁN
                     is_published: Boolean(modRow.is_published),
                     materials,
                     quizzes

@@ -6,6 +6,7 @@ export interface Material {
     url?: string
     fileUrl?: string
     mimeType?: string
+    viewCount?: number // PŘIDÁNO: počítadlo zobrazení/stažení
 }
 
 export interface Question {
@@ -24,15 +25,18 @@ export interface Quiz {
     attemptsCount?: number
 }
 
-// ZDE JE ZMĚNA: Přidán interface Module
 export interface Module {
     uuid: string
     title: string
     description?: string
+    content?: string 
     is_published?: boolean
     order_index?: number
     materials: Material[]
     quizzes: Quiz[]
+    // PŘIDÁNO: UI stavy pro editaci textu
+    isEditingContent?: boolean
+    editContentText?: string
 }
 
 export interface Course {
@@ -40,7 +44,6 @@ export interface Course {
     name: string
     description: string
     difficulty?: string
-    // ZDE JE ZMĚNA: Kurz nyní obsahuje pole modulů
     modules: Module[]
     isPaused?: boolean
     publishedAt?: string | null
@@ -83,6 +86,7 @@ export function transformMaterialFromBackend(material: any): Material {
         url: material.type === 'url' ? material.url || material.content : undefined,
         fileUrl: material.type === 'file' ? material.fileUrl : undefined,
         mimeType: material.mimeType,
+        viewCount: material.viewCount || 0, // PŘIDÁNO
     }
 }
 

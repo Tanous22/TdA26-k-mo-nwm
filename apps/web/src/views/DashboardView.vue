@@ -322,7 +322,17 @@ const saveQuizSeparately = async (courseId: string, quizData: any) => {
               correctIndices
             };
         });
-        const payload = { title: quizData.title, questions: backendQuestions };
+
+        // OPRAVA: Odesílání časování a publikace
+        const payload = { 
+            title: quizData.title, 
+            questions: backendQuestions,
+            scheduledAt: quizData.scheduledAt || null,
+            scheduledEnd: quizData.scheduledEnd || null,
+            durationMinutes: quizData.durationMinutes || null,
+            publishedAt: quizData.publishedAt || null
+        };
+
         let quizUrl, method;
         if (quizData.uuid) {
             quizUrl = `${apiUrl}/courses/${courseId}/quizzes/${quizData.uuid}`;

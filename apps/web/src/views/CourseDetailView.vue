@@ -35,19 +35,45 @@
 
       <div v-for="module in course.modules" :key="module.uuid" class="mb-12 space-y-8">
         
-        <div class="border-b-2 border-gray-200 pb-4 mb-6 flex justify-between items-end">
-          <div>
+        <div class="border-b-2 border-gray-200 pb-4 mb-6 flex justify-between items-start">
+          <div class="flex-1 mr-6">
             <h2 class="text-3xl font-bold text-gray-800">{{ module.title }}</h2>
-            <p v-if="module.description" class="text-gray-500 mt-1">{{ module.description }}</p>
+            <p v-if="module.description" class="text-gray-500 mt-1 font-semibold">{{ module.description }}</p>
+            
+            <div class="mt-4">
+              <div v-if="module.isEditingContent" class="space-y-3">
+                <textarea 
+                  v-model="module.editContentText" 
+                  class="w-full p-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-[#0070BB] outline-none" 
+                  rows="5"
+                  placeholder="Zadejte výukový text k tomuto modulu..."
+                ></textarea>
+                <div class="flex gap-2">
+                  <button @click="saveModuleContent(module)" class="bg-[#0070BB] text-white px-4 py-2 rounded-lg text-sm hover:bg-[#005a96]">Uložit text</button>
+                  <button @click="module.isEditingContent = false" class="bg-gray-200 text-gray-700 px-4 py-2 rounded-lg text-sm hover:bg-gray-300">Zrušit</button>
+                </div>
+              </div>
+              <div v-else>
+                <p v-if="module.content" class="text-gray-700 whitespace-pre-wrap leading-relaxed">{{ module.content }}</p>
+                <button 
+                  v-if="isTeacher" 
+                  @click="startEditingContent(module)" 
+                  class="text-sm text-[#0070BB] hover:underline mt-2 font-semibold"
+                >
+                  {{ module.content ? '✎ Upravit text modulu' : '+ Přidat textový obsah modulu' }}
+                </button>
+              </div>
+            </div>
+
           </div>
-          <div class="flex items-center gap-3">
+          <div class="flex flex-col items-end gap-3 min-w-[150px]">
             <span v-if="!module.is_published && isTeacher" class="text-xs bg-red-100 text-red-600 px-3 py-1 rounded-full font-bold">
               Skryto před studenty
             </span>
             <button 
               v-if="isTeacher" 
               @click="toggleModuleVisibility(module)" 
-              class="text-sm px-4 py-2 rounded-lg font-semibold transition-colors"
+              class="text-sm px-4 py-2 rounded-lg font-semibold transition-colors w-full text-center"
               :class="module.is_published ? 'bg-gray-200 text-gray-700 hover:bg-gray-300' : 'bg-[#91F5AD] text-[#1A1A1A] hover:bg-green-300'"
             >
               {{ module.is_published ? 'Skrýt modul' : 'Publikovat modul' }}
@@ -93,23 +119,24 @@
                 <h4 class="font-bold text-gray-800 truncate">{{ mat.name }}</h4>
                 <p class="text-sm text-gray-500 truncate">{{ mat.description }}</p>
               </div>
-              <div>
-                <a
+              <div class="flex items-center gap-4">
+                <span v-if="isTeacher" class="text-xs text-gray-400 font-semibold bg-gray-200 px-2 py-1 rounded">
+                  Zobrazeno: {{ mat.viewCount || 0 }}x
+                </span>
+                <button
                   v-if="mat.type === 'url'"
-                  :href="mat.url"
-                  target="_blank"
+                  @click="openMaterial(mat)"
                   class="text-[#0070BB] font-semibold text-sm hover:underline"
                 >
                   Otevřít →
-                </a>
-                <a
+                </button>
+                <button
                   v-else-if="mat.type === 'file'"
-                  :href="mat.fileUrl"
-                  download
+                  @click="openMaterial(mat)"
                   class="text-[#0070BB] font-semibold text-sm hover:underline"
                 >
                   Stáhnout ↓
-                </a>
+                </button>
               </div>
             </div>
           </div>
@@ -264,7 +291,6 @@ const fetchCourse = async () => {
         router.push('/courses');
         return;
       }
-      // Vyfiltrování skrytých modulů pro studenty
       data.modules = data.modules.filter((m: any) => m.is_published);
     }
     course.value = data
@@ -273,6 +299,50 @@ const fetchCourse = async () => {
     course.value = null
   } finally {
     loading.value = false
+  }
+}
+
+// NOVÉ: Uložení textu modulu
+const startEditingContent = (module: any) => {
+  module.isEditingContent = true
+  module.editContentText = module.content || ''
+}
+
+const saveModuleContent = async (module: any) => {
+  try {
+    const response = await fetch(`${API_URL}/modules/${module.uuid}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ content: module.editContentText })
+    })
+    if (!response.ok) throw new Error('Chyba uložení textu')
+    module.content = module.editContentText
+    module.isEditingContent = false
+    success('Text modulu byl úspěšně uložen')
+  } catch(e) {
+    showError('Nepodařilo se uložit text modulu')
+  }
+}
+
+// NOVÉ: Otevření materiálu a započítání statistiky
+const openMaterial = async (mat: any) => {
+  // 1. Otevřít odkaz / stáhnout soubor rovnou
+  if (mat.type === 'url' && mat.url) {
+    window.open(mat.url, '_blank')
+  } else if (mat.type === 'file' && mat.fileUrl) {
+    const link = document.createElement('a')
+    link.href = mat.fileUrl
+    link.download = mat.name || 'download'
+    link.target = '_blank'
+    link.click()
+  }
+
+  // 2. Odeslat požadavek na backend na +1 zhlédnutí
+  try {
+    await fetch(`${API_URL}/courses/${courseId}/materials/${mat.uuid}/view`, { method: 'POST' })
+    mat.viewCount = (mat.viewCount || 0) + 1 // Okamžitá vizuální změna
+  } catch (e) {
+    console.error('Nepodařilo se započítat statistiku', e)
   }
 }
 

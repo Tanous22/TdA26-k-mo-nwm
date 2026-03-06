@@ -39,6 +39,7 @@ export async function initDatabase() {
         course_id INT NOT NULL,
         title VARCHAR(255) NOT NULL,
         description TEXT,
+        content TEXT,
         is_published BOOLEAN DEFAULT FALSE,
         order_index INT DEFAULT 0,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
@@ -57,6 +58,7 @@ export async function initDatabase() {
         description TEXT,
         content TEXT NOT NULL,
         mime_type VARCHAR(100),
+        view_count INT DEFAULT 0,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
         FOREIGN KEY (module_id) REFERENCES modules(id) ON DELETE CASCADE
