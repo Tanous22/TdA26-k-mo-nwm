@@ -1,6 +1,5 @@
 <template>
   <div class="space-y-6 relative">
-    <!-- Pause Overlay -->
     <div
       v-if="isPaused"
       class="fixed inset-0 bg-black/80 flex items-center justify-center z-50 backdrop-blur-sm"
@@ -20,7 +19,6 @@
       </div>
     </div>
 
-    <!-- Time Warning -->
     <div
       v-if="!submitted && timeRemaining !== null && timeRemaining < 300"
       class="sticky top-0 z-40 bg-orange-50 border-2 border-orange-300 rounded-lg p-4 flex items-center justify-between"
@@ -152,7 +150,6 @@ export interface Quiz {
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { useNotifications } from '../composables/useNotifications'
-import { useApi } from '../composables/useApi'
 
 const props = defineProps<{
   quiz: Quiz
@@ -162,10 +159,11 @@ const props = defineProps<{
 const emit = defineEmits<{
   close: []
   cancel: []
+  submit: [] // PŘIDÁNO
 }>()
 
 const { success, error: showError } = useNotifications()
-const { API_URL } = useApi()
+const API_URL = import.meta.env.VITE_API_URL || '/api' // PŘIDÁNO napřímo
 
 const answers = ref<Record<string, number[]>>({})
 const submitted = ref(false)
@@ -209,9 +207,6 @@ const acknowledgesPause = () => {
   pauseAcknowledged.value = true
 }
 
-/**
- * Polls the quiz status to check if it's been paused or if time has run out
- */
 const pollQuizStatus = async () => {
   if (submitted.value) return
   
@@ -222,13 +217,9 @@ const pollQuizStatus = async () => {
     )
     if (response.ok) {
       const quizData = await response.json()
-      
-      // Check pause status
       const wasPaused = isPaused.value
       isPaused.value = quizData.isPaused || false
       pauseAcknowledged.value = false
-      
-      // If just paused, show overlay
       if (isPaused.value && !wasPaused) {
         pauseAcknowledged.value = false
       }
@@ -238,9 +229,6 @@ const pollQuizStatus = async () => {
   }
 }
 
-/**
- * Calculates and updates time remaining
- */
 const updateTimeRemaining = () => {
   if (!props.quiz.startedAt || !props.quiz.durationMinutes) {
     timeRemaining.value = null
@@ -255,7 +243,6 @@ const updateTimeRemaining = () => {
 
   if (remaining <= 0) {
     timeRemaining.value = 0
-    // Auto-submit when time runs out
     if (!submitted.value) {
       submitQuiz()
     }
@@ -294,7 +281,7 @@ const submitQuiz = async () => {
         body: JSON.stringify(payload),
       }
     )
-    if (!response.ok) throw new Error('Failed to submit quiz')
+    if (!response.ok) throw new Error('Odeslání selhalo - chyba na serveru (zkontroluj backend konzoli).')
     const data = await response.json()
     result.value = {
       score: data.score,
@@ -302,22 +289,19 @@ const submitQuiz = async () => {
     }
     submitted.value = true
     success('Kvíz byl vyhodnocen!')
+    emit('submit') // Dáme vědět, že máme aktualizovat statistiky
   } catch (err) {
     showError(
       err instanceof Error ? err.message : 'Chyba při odesílání kvízu'
     )
+    console.error(err)
   }
 }
 
 onMounted(() => {
-  // Initial status check
   updateTimeRemaining()
   pollQuizStatus()
-
-  // Set up polling for quiz status (every 2 seconds)
   pollInterval = setInterval(pollQuizStatus, 2000)
-
-  // Set up timer for countdown (every second)
   timerInterval = setInterval(updateTimeRemaining, 1000)
 })
 

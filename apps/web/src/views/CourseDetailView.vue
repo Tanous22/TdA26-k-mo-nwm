@@ -33,7 +33,7 @@
         Zatím zde nejsou žádné moduly.
       </div>
 
-      <div v-for="module in course.modules" :key="module.uuid" class="mb-12 space-y-8">
+      <div v-for="(module, index) in course.modules" :key="module.uuid" class="mb-12 space-y-8">
         
         <div class="border-b-2 border-gray-200 pb-4 mb-6 flex justify-between items-start">
           <div class="flex-1 mr-6">
@@ -64,11 +64,30 @@
                 </button>
               </div>
             </div>
-
           </div>
+
           <div class="flex flex-col items-end gap-3 min-w-[150px]">
-            <span v-if="!module.is_published && isTeacher" class="text-xs bg-red-100 text-red-600 px-3 py-1 rounded-full font-bold">
-              Skryto před studenty
+            <div v-if="isTeacher" class="flex gap-1 bg-white border border-gray-200 rounded-lg p-1 shadow-sm w-full justify-center">
+              <button 
+                @click="moveModule(index, -1)" 
+                :disabled="index === 0"
+                class="p-1 px-3 rounded hover:bg-gray-100 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                title="Posunout nahoru"
+              >
+                ⬆️
+              </button>
+              <button 
+                @click="moveModule(index, 1)" 
+                :disabled="index === course.modules.length - 1"
+                class="p-1 px-3 rounded hover:bg-gray-100 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                title="Posunout dolů"
+              >
+                ⬇️
+              </button>
+            </div>
+
+            <span v-if="!module.is_published && isTeacher" class="text-xs bg-red-100 text-red-600 px-3 py-1 rounded-full font-bold w-full text-center">
+              Skryto
             </span>
             <button 
               v-if="isTeacher" 
@@ -220,7 +239,7 @@
         <QuizRunner
           :quiz="activeQuiz"
           :courseId="courseId"
-          @close="activeQuiz = null"
+          @close="handleQuizClose"
           @cancel="activeQuiz = null"
         />
       </div>
@@ -302,7 +321,37 @@ const fetchCourse = async () => {
   }
 }
 
-// NOVÉ: Uložení textu modulu
+const moveModule = async (index: number, direction: number) => {
+  if (!course.value || !course.value.modules) return
+  
+  const newModules = [...course.value.modules]
+  const targetIndex = index + direction; // TADY JE ZÁSADNÍ STŘEDNÍK!
+  
+  // Moderní ES6 prohození prvků pole (s vykřičníky pro TypeScript)
+  [newModules[index], newModules[targetIndex]] = [newModules[targetIndex]!, newModules[index]!];
+  
+  try {
+    loading.value = true
+    
+    const promises = newModules.map((mod, i) => {
+      return fetch(`${API_URL}/modules/${mod.uuid}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ order_index: i + 1 })
+      })
+    })
+    
+    await Promise.all(promises)
+    
+    success('Pořadí bylo upraveno')
+    await fetchCourse()
+  } catch (err) {
+    showError('Nepodařilo se změnit pořadí')
+  } finally {
+    loading.value = false
+  }
+}
+
 const startEditingContent = (module: any) => {
   module.isEditingContent = true
   module.editContentText = module.content || ''
@@ -324,9 +373,7 @@ const saveModuleContent = async (module: any) => {
   }
 }
 
-// NOVÉ: Otevření materiálu a započítání statistiky
 const openMaterial = async (mat: any) => {
-  // 1. Otevřít odkaz / stáhnout soubor rovnou
   if (mat.type === 'url' && mat.url) {
     window.open(mat.url, '_blank')
   } else if (mat.type === 'file' && mat.fileUrl) {
@@ -337,10 +384,9 @@ const openMaterial = async (mat: any) => {
     link.click()
   }
 
-  // 2. Odeslat požadavek na backend na +1 zhlédnutí
   try {
     await fetch(`${API_URL}/courses/${courseId}/materials/${mat.uuid}/view`, { method: 'POST' })
-    mat.viewCount = (mat.viewCount || 0) + 1 // Okamžitá vizuální změna
+    mat.viewCount = (mat.viewCount || 0) + 1 
   } catch (e) {
     console.error('Nepodařilo se započítat statistiku', e)
   }
@@ -538,6 +584,11 @@ const handleQuizSave = async (quizData: any) => {
   } catch (err) {
     showError(err instanceof Error ? err.message : 'Chyba při ukládání kvízu')
   }
+}
+
+const handleQuizClose = async () => {
+  activeQuiz.value = null
+  await fetchCourse() // Načte znovu kurz a obnoví se díky tomu statistiky pokusů!
 }
 
 onMounted(() => {
