@@ -183,7 +183,6 @@ const fetchCourses = async () => {
 const toggleCourseStatus = async (course: Course) => {
   if (!course.uuid) return;
   const action = course.isPaused ? "resume" : "pause";
-  const actionName = course.isPaused ? "Spuštění" : "Pozastavení";
 
   try {
     const response = await fetch(`${apiUrl}/courses/${course.uuid}/control`, {

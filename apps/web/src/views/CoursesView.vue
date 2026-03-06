@@ -65,8 +65,7 @@ interface Course {
   description: string
   difficulty?: string
   category?: string
-  materials: any[]
-  quizzes: any[]
+  modules: any[]
   publishedAt?: string | null
   isPaused?: boolean
 }

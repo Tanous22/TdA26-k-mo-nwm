@@ -477,7 +477,7 @@ const validateQuiz = (): boolean => {
   return true;
 };
 
-const controlQuiz = async (action: 'start' | 'pause' | 'resume') => {
+const controlQuiz = async (action: string) => {
   if (!quizData.value.uuid || !props.courseId) return;
 
   try {
@@ -493,8 +493,8 @@ const controlQuiz = async (action: 'start' | 'pause' | 'resume') => {
 
     if (!response.ok) throw new Error('Nepodařilo se změnit stav kvízu');
     
-    const result = await response.json();
-    
+    await response.json();
+
     quizStarted.value = action === 'start' || (quizStarted.value && action !== 'start');
     quizPaused.value = action === 'pause' || (quizPaused.value && action === 'pause');
     
